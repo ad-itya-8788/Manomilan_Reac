@@ -7,6 +7,7 @@ use App\Http\Middleware\AuditApiActivity;
 use App\Http\Middleware\EnforceApiModulePermissions;
 use App\Http\Middleware\EnsureWebsiteAvailable;
 use App\Http\Middleware\AuthorizeModulePermission;
+use App\Http\Middleware\DatabaseTransaction;
 use App\Http\Middleware\ExposeRecordEditorNames;
 use App\Http\Middleware\RequireSuperAdmin;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -33,6 +34,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'superadmin' => RequireSuperAdmin::class,
             'website.availability' => EnsureWebsiteAvailable::class,
             'candidate.profile.complete' => \App\Http\Middleware\EnsureCandidateProfileComplete::class,
+        ]);
+        $middleware->appendToGroup('api', [
+            DatabaseTransaction::class,
         ]);
         $middleware->redirectGuestsTo(
             fn (Request $request) => $request->is('api/*') ? null : route('login')
