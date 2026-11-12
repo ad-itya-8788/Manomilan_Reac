@@ -95,6 +95,7 @@ class WorkshopRegistrationController extends Controller
 
     public function index(Request $request)
     {
+        try {
         if (! $request->user() || (! $request->user()->isAdmin())) {
             return response()->json([
                 'success' => false,
@@ -138,10 +139,27 @@ class WorkshopRegistrationController extends Controller
             'data' => $registrations,
             'stats' => $stats,
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function show(Request $request, $id)
     {
+        try {
         if (! $request->user() || (! $request->user()->isAdmin())) {
             return response()->json([
                 'success' => false,
@@ -153,6 +171,22 @@ class WorkshopRegistrationController extends Controller
         $registration->payment_screenshot_url = Storage::disk('public')->url($registration->payment_screenshot);
 
         return response()->json(['success' => true, 'data' => $registration]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateStatus(Request $request, $id)

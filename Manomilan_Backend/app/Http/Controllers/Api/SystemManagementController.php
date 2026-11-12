@@ -23,6 +23,7 @@ class SystemManagementController extends Controller
 
     public function index()
     {
+        try {
         $roles = Role::query()
             ->withCount('users')
             ->orderBy('name')
@@ -60,10 +61,27 @@ class SystemManagementController extends Controller
                 ],
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function myPermissions(Request $request)
     {
+        try {
         $user = $request->user();
         $modules = Module::query()
             ->where('status', true)
@@ -116,10 +134,27 @@ class SystemManagementController extends Controller
                 'modules' => $data,
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function storeRole(Request $request)
     {
+        try {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:roles,name'],
             'user_type' => ['required', 'string', 'max:255', 'unique:roles,user_type'],
@@ -149,10 +184,27 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'role.created', 'system_configuration', 'Role', $role->id, null, [], $role->only(['name', 'user_type', 'is_active']));
 
         return response()->json(['success' => true, 'data' => $role], 201);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateRole(Request $request, Role $role)
     {
+        try {
         $this->protectSystemRole($role);
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('roles', 'name')->ignore($role->id)],
@@ -171,18 +223,52 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'role.updated', 'system_configuration', 'Role', $role->id, null, $old, $role->only(array_keys($data)));
 
         return response()->json(['success' => true, 'data' => $role]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function showRole(Request $request, Role $role)
     {
+        try {
         $role->loadCount('users');
         $role->setAttribute('is_protected', $role->isProtectedSystemRole());
 
         return response()->json(['success' => true, 'data' => $role]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function deleteRole(Request $request, Role $role)
     {
+        try {
         $this->protectSystemRole($role);
         if ($role->users()->exists()) {
             return response()->json(['success' => false, 'message' => 'This role still has assigned users. Reassign them before deleting it.'], 409);
@@ -193,10 +279,27 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'role.deleted', 'system_configuration', 'Role', $old['id'], null, $old, []);
 
         return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function showRolePermissions(Role $role)
     {
+        try {
         $grants = ModulePermission::query()
             ->where('role_id', $role->id)
             ->get()
@@ -236,10 +339,27 @@ class SystemManagementController extends Controller
                 'last_updated_at' => $lastUpdated,
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateRolePermissions(Request $request, Role $role)
     {
+        try {
         $this->protectSystemRole($role);
         $validated = $request->validate([
             'permissions' => ['present', 'array'],
@@ -300,10 +420,27 @@ class SystemManagementController extends Controller
         });
 
         return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function storeModule(Request $request)
     {
+        try {
         $data = $request->validate([
             'module_name' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string'],
@@ -340,10 +477,27 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'module.created', 'system_configuration', 'Module', $module->id, null, [], $module->only(['module_key', 'module_name', 'description']));
 
         return response()->json(['success' => true, 'data' => $module], 201);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateModule(Request $request, Module $module)
     {
+        try {
         $data = $request->validate([
             'module_name' => ['sometimes', 'required', 'string', 'max:100'],
             'description' => ['nullable', 'string'],
@@ -365,17 +519,51 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'module.updated', 'system_configuration', 'Module', $module->id, null, $old, $module->only(array_keys($data)));
 
         return response()->json(['success' => true, 'data' => $module->fresh()]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function showModule(Request $request, Module $module)
     {
+        try {
         $module->setAttribute('available_permissions', array_keys(ModulePermission::ACTIONS));
 
         return response()->json(['success' => true, 'data' => $module]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function deleteModule(Request $request, Module $module)
     {
+        try {
         $hasGrants = ModulePermission::query()
             ->where('module_id', $module->id)
             ->where(function ($query) {
@@ -393,10 +581,27 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'module.deleted', 'system_configuration', 'Module', $old['id'], null, $old, []);
 
         return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function users(Request $request, User $user = null)
     {
+        try {
         if ($user) {
             return response()->json(['success' => true, 'data' => $user->load('role')]);
         }
@@ -415,10 +620,27 @@ class SystemManagementController extends Controller
             ->paginate(25);
 
         return response()->json(['success' => true, 'data' => $users]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function assignUserRole(Request $request, User $user)
     {
+        try {
         if ((int) $request->user()->id === (int) $user->id) {
             return response()->json(['success' => false, 'message' => 'You cannot change your own role.'], 403);
         }
@@ -438,10 +660,27 @@ class SystemManagementController extends Controller
         $this->auditLogger->log($request->user(), 'user.role_changed', 'authentication_security', 'User', $user->id, $user->profile_id, ['role' => $oldRole], ['role' => $role->name]);
 
         return response()->json(['success' => true, 'data' => $user->load('role')]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function auditLogs(Request $request)
     {
+        try {
         $filters = $request->validate($this->auditFilterRules());
         $logs = $this->filteredAuditQuery($filters)
             ->with(['user:id,name', 'module:id,module_name'])
@@ -455,6 +694,22 @@ class SystemManagementController extends Controller
                 'actions' => ActivityLog::query()->distinct()->orderBy('action')->pluck('action'),
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function exportAuditLogs(Request $request): StreamedResponse

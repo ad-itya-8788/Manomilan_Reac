@@ -12,6 +12,7 @@ class UserManagementController extends Controller
 {
     public function resetPasswordList(Request $request)
     {
+        try {
         // Only Super Admin can access this
         if (Auth::user()->user_type !== '00') {
             return redirect()->route('home')->with('error', 'Unauthorized access.');
@@ -37,10 +38,27 @@ class UserManagementController extends Controller
             ->appends(['q' => $q]);
 
         return view('admin.users.reset_passwords', compact('users', 'q'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function resetPasswordAction(Request $request, $id)
     {
+        try {
         if (Auth::user()->user_type !== '00') {
             return redirect()->back()->with('error', 'Unauthorized access.');
         }
@@ -57,5 +75,21 @@ class UserManagementController extends Controller
         $user->save();
 
         return redirect()->back()->with('success', 'Password for ' . $user->name . ' has been reset to "manomilana". They will be asked to change it upon next login.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 }

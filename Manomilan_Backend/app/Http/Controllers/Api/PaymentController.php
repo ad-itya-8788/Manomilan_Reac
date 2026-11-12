@@ -427,6 +427,7 @@ class PaymentController extends Controller
 
     public function myPayments(Request $request)
     {
+        try {
         $user = $request->user();
 
         $payments = PaymentScreenshot::where('profile_id', $user->profile_id)
@@ -436,10 +437,27 @@ class PaymentController extends Controller
         $payments->getCollection()->transform(fn (PaymentScreenshot $payment) => $this->presentPayment($payment));
 
         return response()->json(['success' => true, 'data' => $payments]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function index(Request $request)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -451,6 +469,22 @@ class PaymentController extends Controller
         $payments->getCollection()->transform(fn (PaymentScreenshot $payment) => $this->presentPayment($payment));
 
         return response()->json(['success' => true, 'data' => $payments]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateStatus(Request $request, $id)

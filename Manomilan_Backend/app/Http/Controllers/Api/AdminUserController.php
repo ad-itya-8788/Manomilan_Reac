@@ -13,6 +13,7 @@ class AdminUserController extends Controller
 {
     public function index(Request $request)
     {
+        try {
         if (! $this->isSuperAdmin($request)) {
             return response()->json([
                 'success' => false,
@@ -100,6 +101,22 @@ class AdminUserController extends Controller
                 'inactive' => (int) ($stats->inactive ?? 0),
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function resetPassword(Request $request, int $id)

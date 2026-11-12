@@ -14,6 +14,7 @@ class CandidateRequestController extends Controller
     */
     public function index(Request $request)
     {
+        try {
         // We order by ID Descending so that the newest registrations (and latest imports) 
         // appear at the top of the list for the admin to see immediately.
         $query = CandidateRequest::where('status', 1)
@@ -28,15 +29,65 @@ class CandidateRequestController extends Controller
 
         $candidates = $query->paginate(20)->appends($request->only(['name', 'occupation']));
         return view('candidate_requests.index', compact('candidates'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 public function show($id)
 {
+    try {
     $candidate = CandidateRequest::findOrFail($id);
     return view('candidate_requests.show', compact('candidate'));
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
     public function create()
     {
+        try {
         return view('candidate_requests.create');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -47,6 +98,7 @@ public function show($id)
     */
     public function store(Request $request)
 {
+    try {
     $request->validate([
         'name' => 'required',
         'birth_date' => 'required',
@@ -84,6 +136,22 @@ public function show($id)
     ]);
 
     return redirect()->route('paymentpage')->with('success', 'Registration submitted successfully!');
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
 
 
@@ -94,8 +162,25 @@ public function show($id)
     */
     public function edit($id)
     {
+        try {
         $candidate = CandidateRequest::findOrFail($id);
         return view('candidate_requests.edit', compact('candidate'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -106,6 +191,7 @@ public function show($id)
     */
     public function update(Request $request, $id)
     {
+        try {
         $candidate = CandidateRequest::findOrFail($id);
 
         $request->validate([
@@ -156,6 +242,22 @@ public function show($id)
 
         return redirect()->route('candidate.edit', ['id' => $candidate->id])
     ->with('success', 'Candidate updated successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
     
     /**
@@ -163,11 +265,28 @@ public function show($id)
      */
     public function remove($id)
     {
+        try {
         $candidate = CandidateRequest::findOrFail($id);
         $candidate->status = 0;
         $candidate->updated_by = auth()->id() ?? null;
         $candidate->save();
         return redirect()->route('candidate.index')->with('success', 'Candidate removed successfully.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -364,16 +483,34 @@ public function show($id)
 
     public function activate($id)
 {
+    try {
     $candidate = CandidateRequest::findOrFail($id);
     $candidate->status = 1;
     $candidate->updated_by = auth()->id() ?? null;
     $candidate->save();
 
     return redirect()->route('candidate.inactive')->with('success', 'Candidate activated successfully.');
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
 
     public function inactive(Request $request)
     {
+        try {
         // Sort by ID Descending to show the most recently removed/inactive candidates first.
         $query = CandidateRequest::where('status', 0)
                     ->orderBy('id', 'desc');
@@ -387,5 +524,21 @@ public function show($id)
 
         $candidates = $query->paginate(20)->appends($request->only(['name', 'occupation']));
         return view('candidate_requests.inactive', compact('candidates'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 }
