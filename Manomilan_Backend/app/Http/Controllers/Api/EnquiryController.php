@@ -13,6 +13,7 @@ class EnquiryController extends Controller
 {
     public function index(Request $request)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -20,6 +21,22 @@ class EnquiryController extends Controller
         $enquiries = Enquiry::latest()->paginate((int) $request->input('per_page', 20));
 
         return response()->json(['success' => true, 'data' => $enquiries]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function store(Request $request)
@@ -75,6 +92,7 @@ class EnquiryController extends Controller
 
     public function show(Request $request, $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -86,6 +104,22 @@ class EnquiryController extends Controller
         }
 
         return response()->json(['success' => true, 'data' => $enquiry]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function update(Request $request, $id)

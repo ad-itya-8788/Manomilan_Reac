@@ -19,6 +19,7 @@ class TicketController extends Controller
      */
     public function index(Request $request)
     {
+        try {
         $query = Ticket::with(['module', 'statusHistory'])
             ->where('user_id', auth()->id())
             ->where('status', 1);
@@ -35,6 +36,22 @@ class TicketController extends Controller
         $tickets = $query->orderBy('id', 'DESC')->paginate(10);
 
         return view('software_tickets.index', compact('tickets'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -42,6 +59,7 @@ class TicketController extends Controller
      */
     public function inactive(Request $request)
     {
+        try {
         $query = Ticket::with(['module', 'statusHistory'])
             ->where('user_id', auth()->id())
             ->where('status', 0);
@@ -58,6 +76,22 @@ class TicketController extends Controller
         $tickets = $query->orderBy('id', 'DESC')->paginate(10);
 
         return view('software_tickets.inactive', compact('tickets'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -65,6 +99,7 @@ class TicketController extends Controller
      */
     public function create()
     {
+        try {
         $application = Application::where('app_code', 'Manomilan')->first();
         if (!$application) {
             $application = Application::first();
@@ -79,6 +114,22 @@ class TicketController extends Controller
             'application',
             'modules'
         ));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -221,6 +272,7 @@ class TicketController extends Controller
      */
     public function show($id)
     {
+        try {
         $ticket = Ticket::with([
             'module',
             'items',
@@ -229,6 +281,22 @@ class TicketController extends Controller
         ])->findOrFail($id);
 
         return view('software_tickets.show', compact('ticket'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -236,6 +304,7 @@ class TicketController extends Controller
      */
     public function edit($id)
     {
+        try {
         $ticket = Ticket::with(['items'])->findOrFail($id);
 
         if ($ticket->ticket_status != 'Open') {
@@ -253,6 +322,22 @@ class TicketController extends Controller
             ->get() : collect();
 
         return view('software_tickets.edit', compact('ticket', 'modules'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -397,9 +482,26 @@ class TicketController extends Controller
      */
     public function destroy($id)
     {
+        try {
         $ticket = Ticket::findOrFail($id);
         $ticket->update(['status' => 0]);
         return redirect()->route('tickets.index')->with('success', 'Ticket Deactivated Successfully.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**

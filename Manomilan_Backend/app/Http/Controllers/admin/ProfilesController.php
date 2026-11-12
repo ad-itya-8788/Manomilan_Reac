@@ -26,6 +26,7 @@ class ProfilesController extends Controller
 
     public function downloadBiodata($id)
     {
+        try {
 
         // Only super admin can download biodata
         if (Auth::user()->role_id != 1) {
@@ -51,9 +52,26 @@ class ProfilesController extends Controller
         $filename = 'Biodata_' . str_replace(' ', '_', $profile->fullName) . '_' . $profile->profile_id . '.pdf';
 
         return $pdf->download($filename);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
     public function index()
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -290,10 +308,27 @@ class ProfilesController extends Controller
             'gender',
             'reg_type'
         ));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function inactiveProfiles()
     {
+        try {
         $q = request('q');
         $gender = request('gender');
         $reg_type = request('reg_type');
@@ -354,6 +389,22 @@ class ProfilesController extends Controller
             'gender',
             'reg_type'
         ));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function deactivate($id)
@@ -402,6 +453,7 @@ class ProfilesController extends Controller
 
     public function exportProfiles(Request $request)
     {
+        try {
         $q = $request->query('q');
         $gender = $request->query('gender');
         $reg_type = $request->query('reg_type');
@@ -644,15 +696,49 @@ class ProfilesController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function printIdCards()
     {
+        try {
         return view('admin.reports.print_id_cards');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function getAllFilteredProfiles(Request $request)
     {
+        try {
         $q = $request->q;
         $gender = $request->gender;
         $reg_type = $request->reg_type;
@@ -739,10 +825,27 @@ class ProfilesController extends Controller
         });
 
         return response()->json($selectedProfiles);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function generateReceipt($id)
     {
+        try {
         $profile = Profile::with([
             'user',
             'profileMelavaRegistrations' => function ($query) {
@@ -750,17 +853,51 @@ class ProfilesController extends Controller
             },
         ])->findOrFail($id);
         return view('admin.profiles.receipt', compact('profile'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function printReportCard(Request $request, $id)
     {
+        try {
         $profile = Profile::findOrFail($id);
         $srNo = $request->query('sr_no', 'N/A');
         return view('admin.profiles.report_print', compact('profile', 'srNo'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function showPaymentScreenshot($id)
     {
+        try {
         $profile = Profile::with([
             'paymentScreenshots',
             'profileMelavaRegistrations' => function ($query) {
@@ -769,10 +906,27 @@ class ProfilesController extends Controller
             },
         ])->findOrFail($id);
         return view('admin.profiles.payment_screenshot', compact('profile'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function uploadPaymentScreenshotAdmin(Request $request, $id)
     {
+        try {
         if (Auth::user()->role_id != 1) {
             return redirect()->back()->with('error', 'Access denied. Only Super Admins can upload payment screenshots.');
         }
@@ -798,45 +952,136 @@ class ProfilesController extends Controller
         }
 
         return redirect()->back()->with('error', 'Please select an image to upload.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function verifyPayment($id)
     {
+        try {
         $paymentScreenshot = PaymentScreenshot::findOrFail($id);
+        DB::beginTransaction();
         $paymentScreenshot->update(['payment_verified' => true]);
         Profile::find($paymentScreenshot->profile_id)?->syncDocumentVerificationStatus();
 
+        DB::commit();
         return redirect()->back()->with('success', 'Payment verified successfully!');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function verifyMelavaPayment($id)
     {
+        try {
         $registration = ProfileMelavaRegistration::with(['profile', 'campaign'])->findOrFail($id);
+        DB::beginTransaction();
         $registration->update(['payment_verified' => true]);
         Profile::find($registration->profile_id)?->syncDocumentVerificationStatus();
 
+        DB::commit();
         return redirect()->back()->with('success', 'Melava payment verified successfully!');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function verifyMelavaBookletPayment($id)
     {
+        try {
         $registration = ProfileMelavaRegistration::findOrFail($id);
         $registration->update(['payment_verified' => true]);
 
         return redirect()->back()->with('success', 'Melava booklet payment verified successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function verifiedProfiles()
     {
+        try {
         $profiles = Profile::where('profileVerificationStatus', 'Completed')
             ->where('active', 'active')
             ->orderBy('created_at', 'desc')
             ->get();
         return view('admin.profiles.verifiedProfiles', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function visitors()
     {
+        try {
         $userProfile = Profile::find(Auth::user()->profile_id);
 
         if (!$userProfile) {
@@ -861,10 +1106,27 @@ class ProfilesController extends Controller
             ->get();
 
         return view('admin.profiles.visitors', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function showComparison($profileId)
     {
+        try {
         // Find the primary profile
         $profile = Profile::findOrFail($profileId);
         if (!$this->canViewProfileByRegistrationType($profile)) {
@@ -917,10 +1179,27 @@ class ProfilesController extends Controller
                 'other_expectations' => $preferences->other_expectations,
             ] : null
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function editDetails($id)
     {
+        try {
         if (Auth::check() && Auth::user()->user_type == '51') {
             return redirect()->route('home')
                 ->with('error', 'Guest users are not allowed to edit profiles.');
@@ -941,10 +1220,27 @@ class ProfilesController extends Controller
             'admin.profiles.editDetails',
             compact('profile', 'preference')
         );
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateDetails(Request $request, $id)
     {
+        try {
         if (Auth::check() && Auth::user()->user_type == '51') {
             return redirect()->route('home')->with('error', 'Guest users are not allowed to update profiles.');
         }
@@ -1121,6 +1417,7 @@ class ProfilesController extends Controller
             $data['additional_photos'] = $currentPhotos;
         }
 
+        DB::beginTransaction();
         $profile->update($data);
         $profile->calculateCompletionPercentage();
 
@@ -1152,23 +1449,60 @@ class ProfilesController extends Controller
         $completion = $profile->calculateCompletionPercentage();
 
         if (!$profile->hasCompletedMandatoryFields()) {
+            DB::commit();
             return redirect()->route('profiles.editDetails', $profile->id)
                 ->with('success', 'Information saved. Please complete all mandatory fields to access the dashboard.');
         }
 
+        DB::commit();
         return redirect()->route('home')->with('success', 'Profile updated successfully! Welcome to the dashboard.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function editVerifier($id)
     {
+        try {
         $profile = Profile::find($id);
         $verification = DocumentVerification::firstOrCreate(['profile_id' => $profile->id]);
         return view('admin.profiles.editVerifier', compact('profile', 'verification'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
     public function storeVerifier(Request $request, Profile $profile)
     {
+        try {
         // Define the validation rules based on your form fields
         $rules = [
             'identificationProof_status' => 'required|in:pending,verified,rejected,not_eligible',
@@ -1195,6 +1529,7 @@ class ProfilesController extends Controller
         $request->validate($rules);
 
         // Find or create the document verification record
+        DB::beginTransaction();
         $verification = DocumentVerification::updateOrCreate(
             ['profile_id' => $profile->id],
             $request->only(array_keys($rules)) // Get only the validated fields
@@ -1210,11 +1545,30 @@ class ProfilesController extends Controller
             $profile->save();
         }
 
+        DB::commit();
         return redirect()->back()->with('success', 'Document verification updated successfully!');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function unverifiedProfiles(Request $request)
     {
+        try {
         // Super Admin access check
         if (Auth::user()->user_type !== '00') {
             abort(403, 'Unauthorized');
@@ -1272,10 +1626,27 @@ class ProfilesController extends Controller
             'exportRouteName',
             'title'
         ));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function show(Profile $profile)
     {
+        try {
         if ((int) Auth::user()->profile_id !== (int) $profile->id && !$this->canViewProfileByRegistrationType($profile)) {
             abort(404);
         }
@@ -1315,6 +1686,22 @@ class ProfilesController extends Controller
         }
 
         return view('admin.profiles.show', compact('profile', 'preference', 'templates'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     // public function showCandidate($id)
@@ -1349,6 +1736,7 @@ class ProfilesController extends Controller
 
     public function showCandidate($id)
     {
+        try {
         $profile = Profile::findOrFail($id);
 
         // If viewing own profile
@@ -1445,15 +1833,48 @@ class ProfilesController extends Controller
                 'canViewDirectContact'
             )
         );
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
 
     public function destroy(Profile $profile)
     {
+        try {
         $profile->active = 'deactive';
         $profile->save();
         return redirect()->back()->with('success', 'Profile deleted successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -1462,6 +1883,7 @@ class ProfilesController extends Controller
      */
     public function deleteDocument(Request $request, Profile $profile)
     {
+        try {
 
 
         $documentType = $request->input('document_type');
@@ -1532,6 +1954,22 @@ class ProfilesController extends Controller
         }
 
         return redirect()->back()->with('error', 'No document found to delete.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -1554,6 +1992,7 @@ class ProfilesController extends Controller
 
     public function getBiodataDetails($id)
     {
+        try {
         $profile = Profile::with('user', 'preference')->findOrFail($id);
         if (!$this->canViewProfileByRegistrationType($profile)) {
             abort(404);
@@ -1576,6 +2015,22 @@ class ProfilesController extends Controller
             'dob_formatted' => $profile->birthDate ? \Carbon\Carbon::parse($profile->birthDate)->format('d M, Y') : 'N/A',
             'today_is_special' => $canViewContact
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -1587,6 +2042,7 @@ class ProfilesController extends Controller
 
     public function search(Request $request)
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -1772,6 +2228,22 @@ class ProfilesController extends Controller
 
         // Return the view with the filtered profiles.
         return view('admin.profiles.profile_search', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function markInterested(Request $request)
@@ -1822,6 +2294,7 @@ class ProfilesController extends Controller
 
     public function acceptedInterestProfiles()
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -1851,10 +2324,27 @@ class ProfilesController extends Controller
 
             ->paginate(10);
         return view('admin.profiles.accepted_profiles', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function ourSuggestionsProfiles()
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -1970,6 +2460,22 @@ class ProfilesController extends Controller
         $profiles = $query->paginate(10)->appends(request()->query());
 
         return view('admin.profiles.suggestions', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -1979,6 +2485,7 @@ class ProfilesController extends Controller
      */
     public function interstShownProfiles()
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -2000,6 +2507,22 @@ class ProfilesController extends Controller
 
             ->paginate(10);
         return view('admin.profiles.interest_shown', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -2009,6 +2532,7 @@ class ProfilesController extends Controller
      */
     public function rejectedInterestProfiles()
     {
+        try {
         // Check if current user is an unverified candidate
         // if (Auth::user()->user_type == '21') {
         //     $currentUserProfile = Profile::where('id', Auth::user()->profile_id)->first();
@@ -2040,10 +2564,27 @@ class ProfilesController extends Controller
             ->paginate(10);
 
         return view('admin.profiles.rejected_profiles', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function acceptInterest(Request $request)
     {
+        try {
         $request->validate(['profile_id' => 'required|exists:profiles,id']);
 
         // The profile_id from request is the Sender's Profile ID.
@@ -2067,6 +2608,22 @@ class ProfilesController extends Controller
         }
 
         return redirect()->back()->with('error', 'Interest record not found.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -2077,6 +2634,7 @@ class ProfilesController extends Controller
      */
     public function rejectInterest(Request $request)
     {
+        try {
         $request->validate(['profile_id' => 'required|exists:profiles,id']);
 
         // The profile_id from request is the Sender's Profile ID.
@@ -2100,6 +2658,22 @@ class ProfilesController extends Controller
         }
 
         return redirect()->back()->with('error', 'Interest record not found.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -2109,6 +2683,7 @@ class ProfilesController extends Controller
      */
     public function interestedProfiles()
     {
+        try {
         $userId = Auth::id();
         // Fetch all interests sent by me
         $interests = \App\UserInterest::where('user_id', $userId)->get();
@@ -2144,6 +2719,22 @@ class ProfilesController extends Controller
         }
 
         return view('admin.profiles.interested_profiles', compact('profiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function markAttendance($id)
@@ -2190,6 +2781,7 @@ class ProfilesController extends Controller
 
     public function exportMelavaAttendance()
     {
+        try {
         $batch = 'october_2026';
 
         $registrations = ProfileMelavaRegistration::with(['profile', 'campaign'])
@@ -2248,6 +2840,22 @@ class ProfilesController extends Controller
 
             fclose($file);
         }, 200, $headers);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 

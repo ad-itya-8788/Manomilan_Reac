@@ -35,6 +35,7 @@ class MelavaCampaignController extends Controller
 
     public function index(Request $request)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
@@ -106,10 +107,27 @@ class MelavaCampaignController extends Controller
                 'undated' => (int) ($stats->undated ?? 0),
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function store(Request $request)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
@@ -153,10 +171,27 @@ class MelavaCampaignController extends Controller
             'message' => 'Melava event created and opened for registration.',
             'data' => $this->present($campaign, $request),
         ], 201);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateStatus(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
@@ -177,10 +212,27 @@ class MelavaCampaignController extends Controller
             'success' => true,
             'data' => $this->present($campaign, $request),
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function update(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
@@ -239,10 +291,27 @@ class MelavaCampaignController extends Controller
             'message' => 'Melava event updated.',
             'data' => $this->present($campaign->refresh(), $request),
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function destroy(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return response()->json(['success' => false, 'message' => 'Forbidden.'], 403);
         }
@@ -266,6 +335,22 @@ class MelavaCampaignController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => 'Melava event deleted.']);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function present(object $campaign, Request $request): array

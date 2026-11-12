@@ -13,7 +13,24 @@ class WorkshopRegistrationController extends Controller
      */
     public function create()
     {
+        try {
         return view('workshop.register');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -21,6 +38,7 @@ class WorkshopRegistrationController extends Controller
      */
     public function store(Request $request)
     {
+        try {
         $request->validate([
             'full_name'              => 'required|max:150',
             'mobile_number'          => 'required|digits_between:10,15',
@@ -66,6 +84,22 @@ class WorkshopRegistrationController extends Controller
         return redirect()
                 ->route('workshop.registration.success')
                 ->with('success','Workshop Registration Submitted Successfully.');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -74,7 +108,24 @@ class WorkshopRegistrationController extends Controller
      */
     public function success()
     {
+        try {
         return view('workshop.success');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -83,6 +134,7 @@ class WorkshopRegistrationController extends Controller
      */
     public function index(Request $request)
 {
+    try {
     $query = WorkshopRegistration::query();
 
     if ($request->filled('name')) {
@@ -118,6 +170,22 @@ class WorkshopRegistrationController extends Controller
         'workshop.admin.index',
         compact('registrations')
     );
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
 
 
@@ -126,11 +194,28 @@ class WorkshopRegistrationController extends Controller
      */
     public function show($id)
     {
+        try {
         $registration = WorkshopRegistration::findOrFail($id);
         return view(
             'workshop.admin.show',
             compact('registration')
         );
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -139,6 +224,7 @@ class WorkshopRegistrationController extends Controller
      */
     public function verify($id)
     {
+        try {
         $registration = WorkshopRegistration::findOrFail($id);
         $registration->status = 'Verified';
         $registration->save();
@@ -146,6 +232,22 @@ class WorkshopRegistrationController extends Controller
             'success',
             'Workshop Registration Verified Successfully.'
         );
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
@@ -154,6 +256,7 @@ class WorkshopRegistrationController extends Controller
      */
     public function reject(Request $request,$id)
     {
+        try {
         $registration = WorkshopRegistration::findOrFail($id);
         $registration->status = 'Rejected';
         $registration->remarks = $request->remarks;
@@ -162,6 +265,22 @@ class WorkshopRegistrationController extends Controller
             'success',
             'Workshop Registration Rejected.'
         );
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -172,8 +291,25 @@ class WorkshopRegistrationController extends Controller
      */
     public function generateReceipt($id)
     {
+        try {
         $registration = WorkshopRegistration::findOrFail($id);
 
         return view('workshop.admin.receipt', compact('registration'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 }

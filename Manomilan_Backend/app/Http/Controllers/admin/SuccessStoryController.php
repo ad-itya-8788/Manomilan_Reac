@@ -14,12 +14,29 @@ class SuccessStoryController extends Controller
      */
     public function index()
     {
+        try {
         $stories = SuccessStory::where('status', 'Active')
                     ->orderBy('display_order')
                     ->latest()
                     ->get();
 
         return view('admin.success_stories.index', compact('stories'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -27,12 +44,29 @@ class SuccessStoryController extends Controller
      */
     public function inactive()
     {
+        try {
         $stories = SuccessStory::where('status', 'Inactive')
                     ->orderBy('display_order')
                     ->latest()
                     ->get();
 
         return view('admin.success_stories.inactive', compact('stories'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -40,7 +74,24 @@ class SuccessStoryController extends Controller
      */
     public function create()
     {
+        try {
         return view('admin.success_stories.create');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -48,6 +99,7 @@ class SuccessStoryController extends Controller
      */
     public function store(Request $request)
     {
+        try {
         $validated = $request->validate([
             'groom_name' => 'required|string|max:255',
             'bride_name' => 'required|string|max:255',
@@ -104,6 +156,22 @@ class SuccessStoryController extends Controller
         SuccessStory::create($data);
 
         return redirect()->route('successStories.index')->with('success', 'Success story created successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -111,9 +179,26 @@ class SuccessStoryController extends Controller
      */
     public function show($id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
 
         return view('admin.success_stories.show', compact('story'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -121,9 +206,26 @@ class SuccessStoryController extends Controller
      */
     public function edit($id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
 
         return view('admin.success_stories.edit', compact('story'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -131,6 +233,7 @@ class SuccessStoryController extends Controller
      */
     public function update(Request $request, $id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
 
         $validated = $request->validate([
@@ -233,6 +336,22 @@ class SuccessStoryController extends Controller
         $story->update($data);
 
         return redirect()->route('successStories.index')->with('success', 'Success story updated successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -240,6 +359,7 @@ class SuccessStoryController extends Controller
      */
     public function destroy($id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
 
         // Delete associated photos
@@ -259,6 +379,22 @@ class SuccessStoryController extends Controller
         $story->delete();
 
         return redirect()->route('successStories.index')->with('success', 'Success story deleted successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -266,10 +402,27 @@ class SuccessStoryController extends Controller
      */
     public function activate($id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
         $story->update(['status' => 'Active']);
 
         return redirect()->route('successStories.inactive')->with('success', 'Success story activated successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     /**
@@ -277,9 +430,26 @@ class SuccessStoryController extends Controller
      */
     public function deactivate($id)
     {
+        try {
         $story = SuccessStory::findOrFail($id);
         $story->update(['status' => 'Inactive']);
 
         return redirect()->route('successStories.index')->with('success', 'Success story deactivated successfully!');
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 }

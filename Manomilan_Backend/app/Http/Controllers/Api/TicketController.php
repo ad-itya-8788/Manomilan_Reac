@@ -28,6 +28,7 @@ class TicketController extends Controller
 
     public function meta()
     {
+        try {
         $application = Application::query()->where('app_code', 'Manomilan')->first()
             ?? Application::query()->orderBy('id')->first();
 
@@ -49,10 +50,27 @@ class TicketController extends Controller
                 'severities' => self::SEVERITIES,
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function index(Request $request)
     {
+        try {
         $user = $request->user();
         $active = (int) $request->input('active', 1) === 0 ? 0 : 1;
         $perPage = min(50, max(1, (int) $request->input('per_page', 10)));
@@ -109,15 +127,48 @@ class TicketController extends Controller
         ]);
 
         return response()->json(['success' => true, 'data' => $tickets]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function store(Request $request)
     {
+        try {
         if ($request->has('items')) {
             return $this->storeWithItems($request);
         }
 
         return $this->storeLegacyTicket($request);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function storeLegacyTicket(Request $request)
@@ -313,6 +364,7 @@ class TicketController extends Controller
 
     public function show(Request $request, $id)
     {
+        try {
         $ticket = Ticket::withoutEvents(fn () => Ticket::with([
             'application',
             'module',
@@ -344,10 +396,27 @@ class TicketController extends Controller
         );
 
         return response()->json(['success' => true, 'data' => $ticket]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function indexComments(Request $request, $ticketId)
     {
+        try {
         $ticket = Ticket::find($ticketId);
         if (! $ticket) {
             return response()->json(['success' => false, 'message' => 'Ticket not found.'], 404);
@@ -373,6 +442,22 @@ class TicketController extends Controller
         );
 
         return response()->json(['success' => true, 'data' => $comments]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function storeComment(Request $request, $ticketId)
@@ -443,6 +528,7 @@ class TicketController extends Controller
 
     public function showComment(Request $request, $ticketId, $commentId)
     {
+        try {
         $ticket = Ticket::find($ticketId);
         if (! $ticket) {
             return response()->json(['success' => false, 'message' => 'Ticket not found.'], 404);
@@ -460,6 +546,22 @@ class TicketController extends Controller
             'success' => true,
             'data' => $this->commentPayload($comment, $request->user()->isAdmin()),
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updateComment(Request $request, $ticketId, $commentId)
@@ -560,6 +662,7 @@ class TicketController extends Controller
 
     public function destroyComment(Request $request, $ticketId, $commentId)
     {
+        try {
         $ticket = Ticket::find($ticketId);
         if (! $ticket) {
             return response()->json(['success' => false, 'message' => 'Ticket not found.'], 404);
@@ -581,6 +684,22 @@ class TicketController extends Controller
         $this->deleteCommentAttachment($attachment);
 
         return response()->json(['success' => true, 'message' => 'Comment deleted successfully.']);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function update(Request $request, $id)
@@ -816,6 +935,7 @@ class TicketController extends Controller
 
     public function destroy(Request $request, $id)
     {
+        try {
         $ticket = Ticket::find($id);
         if (! $ticket) {
             return response()->json(['success' => false, 'message' => 'Ticket not found.'], 404);
@@ -828,10 +948,27 @@ class TicketController extends Controller
         $ticket->save();
 
         return response()->json(['success' => true, 'message' => 'Ticket deactivated successfully.']);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function activate(Request $request, $id)
     {
+        try {
         $ticket = Ticket::find($id);
         if (! $ticket) {
             return response()->json(['success' => false, 'message' => 'Ticket not found.'], 404);
@@ -844,6 +981,22 @@ class TicketController extends Controller
         $ticket->save();
 
         return response()->json(['success' => true, 'message' => 'Ticket activated successfully.']);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function canManageTicket(Request $request, Ticket $ticket): bool

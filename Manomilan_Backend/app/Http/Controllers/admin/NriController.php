@@ -13,6 +13,7 @@ class NriController extends Controller
 
     public function index(Request $request)
     {
+        try {
         $q = $request->query('q');
         $gender = $request->query('gender');
         $reg_type = $request->query('reg_type');
@@ -157,10 +158,27 @@ class NriController extends Controller
             'searchRouteName',
             'exportRouteName'
         ));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function export(Request $request)
     {
+        try {
         $q = $request->query('q');
         $gender = $request->query('gender');
         $reg_type = $request->query('reg_type');
@@ -275,5 +293,21 @@ class NriController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 }

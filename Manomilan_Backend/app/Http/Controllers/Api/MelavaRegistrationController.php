@@ -29,6 +29,7 @@ class MelavaRegistrationController extends Controller
 {
     public function photoPreview(Request $request)
     {
+        try {
         $data = $request->validate([
             'path' => ['required', 'string', 'max:500'],
         ]);
@@ -51,10 +52,27 @@ class MelavaRegistrationController extends Controller
             'Cache-Control' => 'public, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function settings(Request $request)
     {
+        try {
         $campaigns = DB::table('melava_campaigns')->where('status', 'active')->latest('id')->get()
             ->map(fn ($campaign) => [
                 'id' => (int) $campaign->id,
@@ -69,10 +87,27 @@ class MelavaRegistrationController extends Controller
             ])->values();
 
         return response()->json(['success' => true, 'data' => ['campaigns' => $campaigns]]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function index(Request $request)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -131,10 +166,27 @@ class MelavaRegistrationController extends Controller
                 'pending' => (clone $query)->where('payment_verified', false)->count(),
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function check(Request $request)
     {
+        try {
         $data = $request->validate([
             'mobile' => ['required', 'digits:10'],
             'melava_campaign_id' => ['required'],
@@ -339,10 +391,27 @@ class MelavaRegistrationController extends Controller
             'exists' => (bool) $registration,
             'payment_verified' => (bool) $registration?->payment_verified,
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function saveDraft(Request $request)
     {
+        try {
         $data = $request->validate([
             'mobile' => ['required', 'digits:10'],
             'registration_data' => ['required'],
@@ -384,6 +453,22 @@ class MelavaRegistrationController extends Controller
         ])->save();
 
         return response()->json(['success' => true, 'token' => $draft->token]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function storeDraftFiles(Request $request, array $registrationData, string $token): array
@@ -459,6 +544,7 @@ class MelavaRegistrationController extends Controller
 
     public function store(Request $request)
     {
+        try {
         $data = $this->validated($request, true);
         $campaign = $this->campaign($data['melava_campaign_id']);
         if (! $campaign || $campaign->status !== 'active') {
@@ -527,10 +613,27 @@ class MelavaRegistrationController extends Controller
             'message' => 'Melava registration submitted and is pending payment verification.',
             'data' => $this->present($profile[1]),
         ], 201);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function show(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -538,10 +641,27 @@ class MelavaRegistrationController extends Controller
         return $registration
             ? response()->json(['success' => true, 'data' => $this->present($registration, true)])
             : response()->json(['success' => false, 'message' => 'Registration not found.'], 404);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updatePayment(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -585,6 +705,7 @@ class MelavaRegistrationController extends Controller
         if (array_key_exists('booklet_required', $data)) {
             $registration->is_booklet_req = (bool) $data['booklet_required'];
         }
+        DB::beginTransaction();
         $registration->save();
         $registration->loadMissing('campaign');
         $pathsToSync = [];
@@ -625,18 +746,54 @@ class MelavaRegistrationController extends Controller
             $payment->payment_details = $details;
             $payment->save();
         }
+        DB::commit();
         return response()->json(['success' => true, 'data' => $this->present($registration->fresh(['profile', 'campaign']))]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function updatePaymentStatus(Request $request, int $id)
     {
+        try {
         return $this->updatePayment($request->merge([
             'payment_verified' => $request->boolean('payment_verified'),
         ]), $id);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function update(Request $request, int $id)
     {
+        try {
         if (! $this->isAdmin($request->user())) {
             return $this->forbidden();
         }
@@ -649,6 +806,22 @@ class MelavaRegistrationController extends Controller
         $registration->is_booklet_req = $request->boolean('booklet_required', $registration->is_booklet_req);
         $registration->save();
         return response()->json(['success' => true, 'data' => $this->present($registration->fresh(['profile', 'campaign']))]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function saveProfile(?Profile $profile, Request $request, array $data, User $user): Profile

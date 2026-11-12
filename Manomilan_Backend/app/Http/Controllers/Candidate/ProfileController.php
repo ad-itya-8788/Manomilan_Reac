@@ -60,6 +60,7 @@ class ProfileController extends CandidateController
 
     public function status(Request $request)
     {
+        try {
         $user = $this->candidate($request);
         $profile = $user->profile()->with([
             'user',
@@ -85,6 +86,22 @@ class ProfileController extends CandidateController
                 'gender' => strtolower((string) $profile?->groomorbride),
             ],
         ]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function store(Request $request, CandidateProfileService $profileService)

@@ -19,6 +19,7 @@ class MeetingController extends Controller
     // Meditor Login
     public function meetingSchedulars()
     {
+        try {
         $q = request('q');
         $gender = request('gender');
         $reg_type = request('reg_type');
@@ -43,10 +44,27 @@ class MeetingController extends Controller
             ->appends(['q' => $q, 'gender' => $gender, 'reg_type' => $reg_type]);
 
         return view('admin.profileMeetings.list', compact('profiles', 'q', 'gender', 'reg_type'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
     
     public function inactiveMeetingSchedulars(Request $request)
     {
+        try {
         $q = $request->q;
 
         $profiles = Profile::where('profileVerificationStatus', 'Completed')
@@ -63,12 +81,29 @@ class MeetingController extends Controller
             ->appends(['q' => $q]);
 
         return view('admin.profileMeetings.inactiveList', compact('profiles', 'q'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 
 
 public function showMeetingSchedulars($profileId)
 {
+    try {
 
 /*
 |--------------------------------------------------------------------------
@@ -289,6 +324,22 @@ return view(
 );
 
 
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
 
 
@@ -568,6 +619,7 @@ return view(
 
    public function getProfileDetails($profileId)
 {
+    try {
 /*
 |--------------------------------------------------------------------------
 | PRIMARY PROFILE
@@ -799,11 +851,28 @@ return view(
 );
 
 
+    } catch (\Throwable $e) {
+        if ($e instanceof \Illuminate\Validation\ValidationException
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+            || $e instanceof \Illuminate\Auth\AuthenticationException
+            || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+            || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            throw $e;
+        }
+
+        report($e);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Something went wrong. Please try again later.',
+        ], 500);
+    }
 }
 
 
     public function showMatchmakingDashboard($profileId)
     {
+        try {
         // Find the primary profile or return a 404 error if not found.
         $profile = Profile::findOrFail($profileId);
 
@@ -815,6 +884,22 @@ return view(
             ->get();
 
         return view('admin.profileMeetings.showMeetingSchedulars', compact('profile', 'matchedProfiles'));
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
 

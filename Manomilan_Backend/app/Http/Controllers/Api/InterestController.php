@@ -15,6 +15,7 @@ class InterestController extends Controller
 {
     public function sent(Request $request)
     {
+        try {
         $user = $request->user();
 
         $interests = UserInterest::with(['profile.user'])
@@ -32,10 +33,27 @@ class InterestController extends Controller
         });
 
         return response()->json(['success' => true, 'data' => $interests]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function received(Request $request)
     {
+        try {
         $user = $request->user();
         if (! $user->profile_id) {
             return response()->json(['success' => true, 'data' => []]);
@@ -51,6 +69,22 @@ class InterestController extends Controller
             'profile' => $this->presentProfile($interest->user?->profile),
         ]);
         return response()->json(['success' => true, 'data' => $interests]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     public function send(Request $request)
@@ -103,6 +137,7 @@ class InterestController extends Controller
 
     public function respond(Request $request, $id)
     {
+        try {
         $data = $request->validate(['status' => ['required', Rule::in(['accepted', 'rejected'])]]);
         $interest = UserInterest::findOrFail($id);
         $user = $request->user();
@@ -112,6 +147,22 @@ class InterestController extends Controller
         $interest->status = $data['status'];
         $interest->save();
         return response()->json(['success' => true, 'data' => $interest]);
+        } catch (\Throwable $e) {
+            if ($e instanceof \Illuminate\Validation\ValidationException
+                || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
+                || $e instanceof \Illuminate\Auth\AuthenticationException
+                || $e instanceof \Illuminate\Auth\Access\AuthorizationException
+                || $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+                throw $e;
+            }
+
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong. Please try again later.',
+            ], 500);
+        }
     }
 
     private function presentProfile(?Profile $profile): ?array
