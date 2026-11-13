@@ -64,7 +64,7 @@ class NotificationController extends CandidateController
                         'from' => $paginator->firstItem() ?: 0,
                         'to' => $paginator->lastItem() ?: 0,
                     ],
-                    'unread_count' => CandidateNotification::where('user_id', $user->id)->whereNull('read_at')->count(),
+                    'unread_count' => $this->generalUnreadQuery($user->id)->count(),
                 ],
             ]);
         } catch (Throwable $e) {
@@ -86,7 +86,7 @@ class NotificationController extends CandidateController
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'unread_count' => CandidateNotification::where('user_id', $user->id)->whereNull('read_at')->count(),
+                    'unread_count' => $this->generalUnreadQuery($user->id)->count(),
                 ],
             ]);
         } catch (Throwable $e) {
@@ -123,7 +123,7 @@ class NotificationController extends CandidateController
                 'message' => 'Notification marked as read.',
                 'data' => [
                     'notification' => $this->present($notification),
-                    'unread_count' => CandidateNotification::where('user_id', $user->id)->whereNull('read_at')->count(),
+                    'unread_count' => $this->generalUnreadQuery($user->id)->count(),
                 ],
             ]);
         } catch (Throwable $e) {
@@ -141,9 +141,7 @@ class NotificationController extends CandidateController
     {
         try {
             $user = $this->candidate($request);
-            CandidateNotification::where('user_id', $user->id)
-                ->whereNull('read_at')
-                ->update(['read_at' => now()]);
+            $this->generalUnreadQuery($user->id)->update(['read_at' => now()]);
 
             return response()->json([
                 'success' => true,
@@ -180,7 +178,7 @@ class NotificationController extends CandidateController
                 'success' => true,
                 'message' => 'Notification removed.',
                 'data' => [
-                    'unread_count' => CandidateNotification::where('user_id', $user->id)->whereNull('read_at')->count(),
+                    'unread_count' => $this->generalUnreadQuery($user->id)->count(),
                 ],
             ]);
         } catch (Throwable $e) {
@@ -214,6 +212,7 @@ class NotificationController extends CandidateController
                     'actor_photo_url' => $senderPhoto ? $this->fileUrl($senderPhoto) : '',
                 ]);
             }
+
         }
 
         return [
@@ -226,5 +225,13 @@ class NotificationController extends CandidateController
             'read_at' => optional($notification->read_at)->toIso8601String(),
             'created_at' => optional($notification->created_at)->toIso8601String(),
         ];
+    }
+
+    private function generalUnreadQuery(int $userId)
+    {
+        return CandidateNotification::where('user_id', $userId)
+            ->whereNull('read_at')
+            ->whereRaw('LOWER(type) NOT LIKE ?', ['%interest%'])
+            ->whereRaw('LOWER(type) NOT LIKE ?', ['%connect%']);
     }
 }

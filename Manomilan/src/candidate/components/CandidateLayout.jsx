@@ -7,7 +7,7 @@ import CandidateSidebar from "./CandidateSidebar";
 import { useProfileCompletion } from "../profile-completion-context";
 import { clearSession, getCachedHomeData } from "../../auth";
 import { apiMediaUrl, getProfilePhoto } from "../../api";
-import { getCandidateProfile, getUnreadNotificationCount } from "../api";
+import { getCandidateProfile, getUnreadInterestCount, getUnreadNotificationCount } from "../api";
 import "../candidate.css";
 
 const TABS = [
@@ -21,7 +21,8 @@ const TABS = [
 export default function CandidateLayout({ currentPath, candidateInfo, children }) {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [unreadInterestCount, setUnreadInterestCount] = useState(0);
   const cachedHome = getCachedHomeData();
   const photoUrl = (profile) => apiMediaUrl(getProfilePhoto(profile, [
     "photo",
@@ -70,23 +71,31 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
 
   useEffect(() => {
     let active = true;
-    const loadCount = async () => {
+    const loadCounts = async () => {
       try {
-        const result = await getUnreadNotificationCount({ force: true });
-        if (active) setUnreadCount(Number(result?.unread_count) || 0);
+        const [notificationResult, interestResult] = await Promise.all([
+          getUnreadNotificationCount({ force: true }),
+          getUnreadInterestCount({ force: true }),
+        ]);
+        if (active) {
+          setUnreadNotificationCount(Number(notificationResult?.unread_count) || 0);
+          setUnreadInterestCount(Number(interestResult?.unread_count) || 0);
+        }
       } catch {
-        /* The bell is non-critical; ignore transient failures. */
+        /* Badges are non-critical; ignore transient failures. */
       }
     };
 
-    loadCount();
-    const interval = window.setInterval(loadCount, 60000);
-    window.addEventListener("candidate:notifications-updated", loadCount);
+    loadCounts();
+    const interval = window.setInterval(loadCounts, 60000);
+    window.addEventListener("candidate:notifications-updated", loadCounts);
+    window.addEventListener("candidate:interests-updated", loadCounts);
 
     return () => {
       active = false;
       window.clearInterval(interval);
-      window.removeEventListener("candidate:notifications-updated", loadCount);
+      window.removeEventListener("candidate:notifications-updated", loadCounts);
+      window.removeEventListener("candidate:interests-updated", loadCounts);
     };
   }, []);
 
@@ -99,7 +108,8 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
     <div className={`cnd-shell ${collapsed ? "is-collapsed" : ""}`}>
       <CandidateSidebar
         currentPath={currentPath}
-        unreadCount={unreadCount}
+        unreadNotificationCount={unreadNotificationCount}
+        unreadInterestCount={unreadInterestCount}
         onLogout={handleLogout}
       />
 
@@ -121,12 +131,12 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
               <button
                 type="button"
                 className="mm-icon-btn"
-                aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ""}`}
+                aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`}
                 onClick={() => navigate("/candidate/notifications")}
               >
                 <Bell size={24} />
-                {unreadCount > 0 ? (
-                  <span className="mm-notification-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+                {unreadNotificationCount > 0 ? (
+                  <span className="mm-notification-badge">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>
                 ) : null}
               </button>
               {candidatePhoto && failedCandidatePhoto !== candidatePhoto ? (
@@ -177,8 +187,8 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
               >
                 <Icon size={22} strokeWidth={active ? 2.5 : 1.8} />
                 <span>{label}</span>
-                {label === "Interests" && unreadCount > 0 ? (
-                  <span className="mm-nav-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                {label === "Interests" && unreadInterestCount > 0 ? (
+                  <span className="mm-nav-badge">{unreadInterestCount > 9 ? "9+" : unreadInterestCount}</span>
                 ) : null}
               </Link>
             );

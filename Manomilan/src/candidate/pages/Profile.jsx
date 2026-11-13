@@ -18,7 +18,7 @@ import {
   createCandidateProfile, getCandidateProfile, removeCandidateDocument,
   removeCandidatePhoto, savePreferences, updateCandidateProfile,
   uploadCandidateAdditionalPhotos, uploadCandidateDocuments, uploadCandidatePhoto,
-  uploadCandidateBodyPhotos, peekCandidateProfile,
+  uploadCandidateBodyPhotos, removeCandidateBodyPhoto, removeCandidateAdditionalPhoto, peekCandidateProfile,
 } from "../api";
 import {
   displayValue, fileSizeLabel, formatDate, humanGender, text,
@@ -508,13 +508,39 @@ export default function CandidateProfile() {
   const [additionalPhotoFiles, setAdditionalPhotoFiles] = useState([]);
   const [additionalPhotoBusy, setAdditionalPhotoBusy] = useState(false);
   const [additionalPhotoError, setAdditionalPhotoError] = useState("");
+  const [removeAdditionalPhotoIndex, setRemoveAdditionalPhotoIndex] = useState(null);
+  const [additionalPhotoRemoving, setAdditionalPhotoRemoving] = useState(false);
   const [removeDoc, setRemoveDoc] = useState(null);
   const [removeDocBusy, setRemoveDocBusy] = useState(false);
   const [viewDocument, setViewDocument] = useState(null);
   const photoInput = useRef(null);
-  const [bodyPhotoBusy, setBodyPhotoBusy] = useState(false);
-  const [bodyPhotoError, setBodyPhotoError] = useState("");
+  const [bodyPhotoLoading, setBodyPhotoLoading] = useState({
+    full_body_photo: false,
+    half_body_photo: false,
+    selfie_photo: false,
+  });
+  const [bodyPhotoErrors, setBodyPhotoErrors] = useState({});
+  const [removeBodyPhotoField, setRemoveBodyPhotoField] = useState(null);
+  const [bodyPhotoPreviews, setBodyPhotoPreviews] = useState(() => ({
+    full_body_photo: initialProfile?.full_body_photo_url || "",
+    half_body_photo: initialProfile?.half_body_photo_url || "",
+    selfie_photo: initialProfile?.selfie_photo_url || "",
+  }));
   const { toasts, push, dismiss } = useToasts();
+
+  useEffect(() => {
+    if (!profile) return;
+    setBodyPhotoPreviews((current) => ({
+      full_body_photo: current.full_body_photo || profile.full_body_photo_url || "",
+      half_body_photo: current.half_body_photo || profile.half_body_photo_url || "",
+      selfie_photo: current.selfie_photo || profile.selfie_photo_url || "",
+    }));
+  }, [
+    profile,
+    profile?.full_body_photo_url,
+    profile?.half_body_photo_url,
+    profile?.selfie_photo_url,
+  ]);
 
   const load = async () => {
     setLoading(true);
@@ -828,24 +854,57 @@ export default function CandidateProfile() {
     event.target.value = "";
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      setBodyPhotoError("Choose a JPG, PNG or WebP image.");
+      setBodyPhotoErrors((current) => ({ ...current, [field]: "Choose a JPG, PNG or WebP image." }));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setBodyPhotoError("The photo must be 5 MB or smaller.");
+      setBodyPhotoErrors((current) => ({ ...current, [field]: "The photo must be 5 MB or smaller." }));
       return;
     }
 
-    setBodyPhotoBusy(true);
-    setBodyPhotoError("");
+    const previousPreview = bodyPhotoPreviews[field] || profile?.[`${field}_url`] || "";
+    const preview = URL.createObjectURL(file);
+    setBodyPhotoPreviews((current) => ({ ...current, [field]: preview }));
+    setBodyPhotoLoading((current) => ({ ...current, [field]: true }));
+    setBodyPhotoErrors((current) => ({ ...current, [field]: "" }));
     try {
       const result = await uploadCandidateBodyPhotos({ [field]: file });
       applyProfileResponse(result?.profile);
+      setBodyPhotoPreviews((current) => ({
+        ...current,
+        [field]: result?.profile?.[`${field}_url`] || preview,
+      }));
       push("Photo updated successfully.");
     } catch (uploadError) {
-      setBodyPhotoError(uploadError.message || "Could not upload the photo.");
+      setBodyPhotoPreviews((current) => ({ ...current, [field]: previousPreview }));
+      setBodyPhotoErrors((current) => ({
+        ...current,
+        [field]: uploadError.message || "Could not upload the photo.",
+      }));
     } finally {
-      setBodyPhotoBusy(false);
+      URL.revokeObjectURL(preview);
+      setBodyPhotoLoading((current) => ({ ...current, [field]: false }));
+    }
+  };
+
+  const deleteBodyPhoto = async () => {
+    const field = removeBodyPhotoField;
+    if (!field) return;
+    setBodyPhotoLoading((current) => ({ ...current, [field]: true }));
+    setBodyPhotoErrors((current) => ({ ...current, [field]: "" }));
+    try {
+      const result = await removeCandidateBodyPhoto(field);
+      applyProfileResponse(result?.profile);
+      setBodyPhotoPreviews((current) => ({ ...current, [field]: "" }));
+      setRemoveBodyPhotoField(null);
+      push("Photo removed successfully.");
+    } catch (removeError) {
+      setBodyPhotoErrors((current) => ({
+        ...current,
+        [field]: removeError.message || "Could not remove the photo.",
+      }));
+    } finally {
+      setBodyPhotoLoading((current) => ({ ...current, [field]: false }));
     }
   };
 
@@ -890,6 +949,22 @@ export default function CandidateProfile() {
       setAdditionalPhotoError(uploadError.message || "Could not upload additional photos.");
     } finally {
       setAdditionalPhotoBusy(false);
+    }
+  };
+
+  const deleteAdditionalPhoto = async () => {
+    if (removeAdditionalPhotoIndex === null) return;
+    setAdditionalPhotoRemoving(true);
+    setAdditionalPhotoError("");
+    try {
+      const result = await removeCandidateAdditionalPhoto(removeAdditionalPhotoIndex);
+      applyProfileResponse(result?.profile);
+      setRemoveAdditionalPhotoIndex(null);
+      push("Additional photo removed.");
+    } catch (removeError) {
+      setAdditionalPhotoError(removeError.message || "Could not remove the additional photo.");
+    } finally {
+      setAdditionalPhotoRemoving(false);
     }
   };
 
@@ -1216,25 +1291,39 @@ export default function CandidateProfile() {
                   ].map(([field, label, url]) => (
                     <div className="cnd-body-photo-card" key={field}>
                       <div className="cnd-body-photo-preview">
-                        {url ? <img src={url} alt={label} /> : <Camera size={30} />}
-                        {bodyPhotoBusy ? <span className="cnd-photo-overlay"><Loader2 size={22} className="cnd-spin" /></span> : null}
+                        {bodyPhotoPreviews[field] || url ? <img src={bodyPhotoPreviews[field] || url} alt={label} /> : <Camera size={30} />}
+                        {bodyPhotoLoading[field] ? <span className="cnd-photo-overlay"><Loader2 size={22} className="cnd-spin" /></span> : null}
                       </div>
                       <strong>{label}</strong>
-                      <span>{url ? "Uploaded" : "Not uploaded"}</span>
-                      <label className="cnd-btn cnd-btn-light cnd-btn-sm">
-                        {url ? "Replace photo" : "Upload photo"}
-                        <input
-                          className="cnd-file-hidden"
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          disabled={bodyPhotoBusy}
-                          onChange={(event) => handleBodyPhoto(field, event)}
-                        />
-                      </label>
+                      <span>{bodyPhotoPreviews[field] || url ? "Uploaded" : "Not uploaded"}</span>
+                      <div className="cnd-photo-actions">
+                        <label className="cnd-btn cnd-btn-light cnd-btn-sm">
+                          {bodyPhotoPreviews[field] || url ? "Replace photo" : "Upload photo"}
+                          <input
+                            className="cnd-file-hidden"
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            disabled={bodyPhotoLoading[field]}
+                            onChange={(event) => handleBodyPhoto(field, event)}
+                          />
+                        </label>
+                        {(bodyPhotoPreviews[field] || url) ? (
+                          <button
+                            type="button"
+                            className="cnd-icon-btn cnd-photo-remove"
+                            onClick={() => setRemoveBodyPhotoField(field)}
+                            disabled={bodyPhotoLoading[field]}
+                            aria-label={`Remove ${label}`}
+                            title="Remove photo"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        ) : null}
+                      </div>
+                      {bodyPhotoErrors[field] ? <InlineNote tone="error">{bodyPhotoErrors[field]}</InlineNote> : null}
                     </div>
                   ))}
                 </div>
-                {bodyPhotoError ? <InlineNote tone="error">{bodyPhotoError}</InlineNote> : null}
               </SectionCard>
               <SectionCard title="About" subtitle="A short introduction" icon={UserRound} className="cnd-about-card">
                 <p className="cnd-about-text">
@@ -1298,22 +1387,37 @@ export default function CandidateProfile() {
                         ].map(([field, label, url]) => (
                           <div className="cnd-body-photo-card" key={field}>
                             <div className="cnd-body-photo-preview">
-                              {url ? <img src={url} alt={label} /> : <Camera size={30} />}
-                              {bodyPhotoBusy ? <span className="cnd-photo-overlay"><Loader2 size={22} className="cnd-spin" /></span> : null}
+                            {bodyPhotoPreviews[field] || url ? <img src={bodyPhotoPreviews[field] || url} alt={label} /> : <Camera size={30} />}
+                            {bodyPhotoLoading[field] ? <span className="cnd-photo-overlay"><Loader2 size={22} className="cnd-spin" /></span> : null}
                             </div>
                             <strong>{label}</strong>
-                            <span>{url ? "Uploaded" : "Not uploaded"}</span>
-                            <label className="cnd-btn cnd-btn-light cnd-btn-sm">
-                              {url ? "Replace photo" : "Upload photo"}
-                              <input
-                                className="cnd-file-hidden"
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                disabled={bodyPhotoBusy}
-                                onChange={(event) => handleBodyPhoto(field, event)}
-                              />
-                            </label>
-                          </div>
+                          <span>{bodyPhotoPreviews[field] || url ? "Uploaded" : "Not uploaded"}</span>
+                            <div className="cnd-photo-actions">
+                              <label className="cnd-btn cnd-btn-light cnd-btn-sm">
+                                {bodyPhotoPreviews[field] || url ? "Replace photo" : "Upload photo"}
+                                <input
+                                  className="cnd-file-hidden"
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  disabled={bodyPhotoLoading[field]}
+                                  onChange={(event) => handleBodyPhoto(field, event)}
+                                />
+                              </label>
+                              {(bodyPhotoPreviews[field] || url) ? (
+                                <button
+                                  type="button"
+                                  className="cnd-icon-btn cnd-photo-remove"
+                                  onClick={() => setRemoveBodyPhotoField(field)}
+                                  disabled={bodyPhotoLoading[field]}
+                                  aria-label={`Remove ${label}`}
+                                  title="Remove photo"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              ) : null}
+                            </div>
+                          {bodyPhotoErrors[field] ? <InlineNote tone="error">{bodyPhotoErrors[field]}</InlineNote> : null}
+                        </div>
                         ))}
                       </div>
                     ) : null}
@@ -1430,6 +1534,14 @@ export default function CandidateProfile() {
                         <div className="cnd-body-photo-preview"><img src={url} alt={`Additional profile photo ${index + 1}`} /></div>
                         <strong>Additional photo {index + 1}</strong>
                         <span>Uploaded</span>
+                        <button
+                          type="button"
+                          className="cnd-btn cnd-btn-ghost cnd-btn-sm cnd-photo-remove-button"
+                          onClick={() => setRemoveAdditionalPhotoIndex(index)}
+                          disabled={additionalPhotoRemoving}
+                        >
+                          <Trash2 size={15} /> Remove photo
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1610,6 +1722,26 @@ export default function CandidateProfile() {
         busy={removeDocBusy}
         onCancel={() => setRemoveDoc(null)}
         onConfirm={deleteDocument}
+      />
+
+      <ConfirmDialog
+        open={Boolean(removeBodyPhotoField)}
+        title="Remove Photo?"
+        message="Are you sure you want to remove this photo? This action cannot be undone."
+        confirmLabel="Yes, Remove"
+        busy={removeBodyPhotoField ? bodyPhotoLoading[removeBodyPhotoField] : false}
+        onCancel={() => setRemoveBodyPhotoField(null)}
+        onConfirm={deleteBodyPhoto}
+      />
+
+      <ConfirmDialog
+        open={removeAdditionalPhotoIndex !== null}
+        title="Remove Photo?"
+        message="Are you sure you want to remove this photo? This action cannot be undone."
+        confirmLabel="Yes, Remove"
+        busy={additionalPhotoRemoving}
+        onCancel={() => setRemoveAdditionalPhotoIndex(null)}
+        onConfirm={deleteAdditionalPhoto}
       />
 
       <Modal

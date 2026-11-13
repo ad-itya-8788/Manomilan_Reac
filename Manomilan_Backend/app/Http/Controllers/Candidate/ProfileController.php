@@ -367,6 +367,50 @@ class ProfileController extends CandidateController
         }
     }
 
+    public function deleteBodyPhoto(Request $request, string $field)
+    {
+        $allowedFields = ['full_body_photo', 'half_body_photo', 'selfie_photo'];
+        if (! in_array($field, $allowedFields, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This photo cannot be removed.',
+            ], 422);
+        }
+
+        $user = $this->candidate($request);
+        $profile = $this->candidateProfile($request, true);
+        $oldPath = null;
+
+        try {
+            DB::transaction(function () use ($profile, $field, &$oldPath) {
+                $locked = Profile::lockForUpdate()->findOrFail($profile->id);
+                $oldPath = $locked->photoPath($field);
+                $locked->{$field} = null;
+                $locked->save();
+                $this->refreshCompletion($locked);
+            });
+            $this->deleteStoredFile($oldPath);
+
+            $freshProfile = Profile::with(['user', 'preference'])->findOrFail($profile->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Photo removed successfully.',
+                'data' => [
+                    'profile' => $this->presentOwnProfile($freshProfile, $user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            $this->rethrowClientError($e);
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to remove the photo right now.',
+            ], 500);
+        }
+    }
+
     public function uploadAdditionalPhotos(Request $request)
     {
         $request->validate([
@@ -421,6 +465,51 @@ class ProfileController extends CandidateController
             return response()->json([
                 'success' => false,
                 'message' => 'Unable to upload additional photos right now.',
+            ], 500);
+        }
+    }
+
+    public function deleteAdditionalPhoto(Request $request, int $index)
+    {
+        $user = $this->candidate($request);
+        $profile = $this->candidateProfile($request, true);
+        $oldPath = null;
+
+        try {
+            DB::transaction(function () use ($profile, $index, &$oldPath) {
+                $locked = Profile::lockForUpdate()->findOrFail($profile->id);
+                $photos = $this->normalizePathList($locked->getRawOriginal('additional_photos'));
+
+                if (! array_key_exists($index, $photos)) {
+                    throw ValidationException::withMessages([
+                        'index' => ['This additional photo was not found.'],
+                    ]);
+                }
+
+                $oldPath = $photos[$index];
+                array_splice($photos, $index, 1);
+                $locked->additional_photos = $photos ?: null;
+                $locked->save();
+                $this->refreshCompletion($locked);
+            });
+            $this->deleteStoredFile($oldPath);
+
+            $freshProfile = Profile::with(['user', 'preference'])->findOrFail($profile->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Additional photo removed successfully.',
+                'data' => [
+                    'profile' => $this->presentOwnProfile($freshProfile, $user),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            $this->rethrowClientError($e);
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to remove the additional photo right now.',
             ], 500);
         }
     }

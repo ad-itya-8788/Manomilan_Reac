@@ -398,12 +398,26 @@ export const uploadCandidateBodyPhotos = async (photos) => {
   );
 };
 
+export const removeCandidateBodyPhoto = async (field) => {
+  invalidateCandidateProfileCache();
+  return notifyCandidateProfileChanged(
+    data(await request(`/candidate/profile/body-photos/${field}`, { method: "DELETE" })),
+  );
+};
+
 export const uploadCandidateAdditionalPhotos = async (photos) => {
   const form = new FormData();
   photos.forEach((file) => form.append("photos[]", file));
   invalidateCandidateProfileCache();
   return notifyCandidateProfileChanged(
     data(await request("/candidate/profile/additional-photos", { method: "POST", body: form })),
+  );
+};
+
+export const removeCandidateAdditionalPhoto = async (index) => {
+  invalidateCandidateProfileCache();
+  return notifyCandidateProfileChanged(
+    data(await request(`/candidate/profile/additional-photos/${index}`, { method: "DELETE" })),
   );
 };
 
@@ -513,6 +527,7 @@ export const sendInterest = async (profileId) => {
   invalidateMatchesCache();
   clearQueryCache("interests:");
   matchRequestCache.clear();
+  window.dispatchEvent(new CustomEvent("candidate:interests-updated"));
   return result;
 };
 
@@ -522,6 +537,7 @@ export const respondToInterest = async (id, status) => {
     body: { status },
   }));
   clearQueryCache("interests:");
+  window.dispatchEvent(new CustomEvent("candidate:interests-updated"));
   return result;
 };
 
@@ -540,6 +556,15 @@ export const getUnreadNotificationCount = async ({ force = false } = {}) => {
   const cached = force ? null : readQueryCache(cacheKey);
   if (cached) return cached;
   const result = data(await request("/candidate/notifications/unread-count"));
+  writeQueryCache(cacheKey, result);
+  return result;
+};
+
+export const getUnreadInterestCount = async ({ force = false } = {}) => {
+  const cacheKey = "interests:unread-count";
+  const cached = force ? null : readQueryCache(cacheKey);
+  if (cached) return cached;
+  const result = data(await request("/candidate/interests/unread-count"));
   writeQueryCache(cacheKey, result);
   return result;
 };

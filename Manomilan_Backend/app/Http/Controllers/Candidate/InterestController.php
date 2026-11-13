@@ -112,6 +112,31 @@ class InterestController extends CandidateController
         }
     }
 
+    public function unreadCount(Request $request)
+    {
+        try {
+            $user = $this->candidate($request);
+            $profile = $this->matchingProfile($request, $user);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'unread_count' => UserInterest::where('profile_id', $profile->id)
+                        ->whereRaw('LOWER(status) = ?', ['pending'])
+                        ->count(),
+                ],
+            ]);
+        } catch (Throwable $e) {
+            $this->rethrowClientError($e);
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Unable to load your interest count right now.',
+            ], 500);
+        }
+    }
+
     public function store(SendInterestRequest $request)
     {
         try {

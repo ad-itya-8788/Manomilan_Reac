@@ -219,7 +219,11 @@ Route::prefix('admin/success-stories')->group(function () {
         Route::post('/profile/photo', [CandidateProfileController::class, 'uploadPhoto']);
         Route::delete('/profile/photo', [CandidateProfileController::class, 'deletePhoto']);
         Route::post('/profile/body-photos', [CandidateProfileController::class, 'uploadBodyPhotos']);
+        Route::delete('/profile/body-photos/{field}', [CandidateProfileController::class, 'deleteBodyPhoto'])
+            ->whereIn('field', ['full_body_photo', 'half_body_photo', 'selfie_photo']);
         Route::post('/profile/additional-photos', [CandidateProfileController::class, 'uploadAdditionalPhotos']);
+        Route::delete('/profile/additional-photos/{index}', [CandidateProfileController::class, 'deleteAdditionalPhoto'])
+            ->whereNumber('index');
         Route::post('/profile/documents', [CandidateProfileController::class, 'uploadDocuments']);
         Route::delete('/profile/documents/{key}', [CandidateProfileController::class, 'deleteDocument']);
         Route::get('/preferences', [CandidatePreferenceController::class, 'show']);
@@ -232,6 +236,7 @@ Route::prefix('admin/success-stories')->group(function () {
 
         Route::get('/interests/sent', [CandidateInterestController::class, 'sent']);
         Route::get('/interests/received', [CandidateInterestController::class, 'received']);
+        Route::get('/interests/unread-count', [CandidateInterestController::class, 'unreadCount']);
         Route::post('/interests', [CandidateInterestController::class, 'store']);
         Route::post('/interests/{id}/respond', [CandidateInterestController::class, 'respond'])->whereNumber('id');
 

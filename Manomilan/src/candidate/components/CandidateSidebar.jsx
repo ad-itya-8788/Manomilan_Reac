@@ -15,11 +15,21 @@ const ICONS = {
   key: KeyRound,
 };
 
-export default function CandidateSidebar({ currentPath, unreadCount = 0, onLogout }) {
+export default function CandidateSidebar({
+  currentPath,
+  unreadNotificationCount = 0,
+  unreadInterestCount = 0,
+  onLogout,
+}) {
   const renderItem = (item) => {
     const Icon = ICONS[item.icon] || Heart;
     const active = currentPath === item.path;
-    const showBadge = item.path === "/candidate/notifications" && unreadCount > 0;
+    const count = item.path === "/candidate/notifications"
+      ? unreadNotificationCount
+      : item.path === "/candidate/interests-received"
+        ? unreadInterestCount
+        : 0;
+    const showBadge = count > 0;
 
     return (
       <Link
@@ -32,7 +42,7 @@ export default function CandidateSidebar({ currentPath, unreadCount = 0, onLogou
         <span className="cnd-nav-icon"><Icon size={19} /></span>
         <span className="cnd-nav-text">{item.label}</span>
         {showBadge ? (
-          <span className="cnd-nav-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
+          <span className="cnd-nav-badge">{count > 99 ? "99+" : count}</span>
         ) : null}
       </Link>
     );
