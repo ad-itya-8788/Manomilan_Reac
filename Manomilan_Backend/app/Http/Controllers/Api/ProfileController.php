@@ -625,19 +625,22 @@ class ProfileController extends Controller
                 'medicalFitnessCertificate' => ['medical_fitness_certificate'],
                 'selfieVerification' => [],
             ];
+            $legacyRegistrationDocuments = $this->legacyRegistrationDocuments($profile);
 
             foreach (self::DOCUMENT_KEYS as $key) {
-                $path = $this->documentPath($profile, $key, $documentColumns);
+                $path = $this->documentPath($profile, $key, $documentColumns, $legacyRegistrationDocuments);
                 if (! is_string($path) || trim($path) === '') {
                     continue;
                 }
 
                 $status = strtolower(trim((string) ($verification?->{$key.'_status'} ?: 'pending')));
+                $fileAvailable = $this->documentFileAvailable($path);
 
                 $documents[] = [
                     'id' => $key,
                     'label' => $this->documentLabel($key),
-                    'url' => $this->fileUrl($path),
+                    'url' => $fileAvailable ? $this->fileUrl($path) : null,
+                    'available' => $fileAvailable,
                     'status' => $status,
                     'verified' => in_array($status, ['verified', 'approved', 'approve', 'complete', 'completed'], true),
                 ];
@@ -1815,13 +1818,17 @@ class ProfileController extends Controller
         $profilePhoto = $storedPhotos['profile_photo'] ?? $storedPhotos[0] ?? $profile->profilePhoto;
         $profilePhoto = $profile->profilePhotoWithFallback($profilePhoto);
         $verification = DocumentVerification::firstOrCreate(['profile_id' => $profile->id]);
+        $legacyRegistrationDocuments = $this->legacyRegistrationDocuments($profile);
 
         $documents = [];
         foreach (self::DOCUMENT_KEYS as $key) {
-            $path = $this->documentPath($profile, $key);
+            $path = $this->documentPath($profile, $key, null, $legacyRegistrationDocuments);
+            $fileAvailable = $this->documentFileAvailable($path);
 
             $documents[$key] = [
-                'file_url' => $this->fileUrl($path),
+                'file_url' => $fileAvailable ? $this->fileUrl($path) : null,
+                'has_reference' => is_string($path) && trim($path) !== '',
+                'available' => $fileAvailable,
                 'status' => $this->cleanStatus($verification->{$key.'_status'} ?? 'pending'),
                 'remarks' => (string) ($verification->{$key.'_remarks'} ?? ''),
             ];
@@ -1965,8 +1972,8 @@ class ProfileController extends Controller
             'mobile' => $user->username ?? $profile->phone,
             'email' => $profile->email ?? $user->email ?? null,
             'registration_date' => optional($profile->created_at)->format('d-m-Y'),
-            'status' => $profile->verification_status === 'Completed' ? 'Verified' : 'Pending',
-            'is_verified' => $profile->verification_status === 'Completed',
+            'status' => $verificationSummary['display_status'],
+            'is_verified' => $verificationSummary['is_verified'],
             'payment_verified' => $verificationSummary['payment_verified'],
             'documents_verified' => $verificationSummary['documents_verified'],
             'documents_total' => $verificationSummary['documents_total'],
@@ -2173,7 +2180,12 @@ class ProfileController extends Controller
         return 'data:'.$mimeType.';base64,'.base64_encode($contents);
     }
 
-    private function documentPath(Profile $profile, string $key, ?array $documentColumns = null): ?string
+    private function documentPath(
+        Profile $profile,
+        string $key,
+        ?array $documentColumns = null,
+        ?array $legacyRegistrationDocuments = null
+    ): ?string
     {
         $documentColumns ??= [
             'identificationProof' => ['aadhaar_card', 'pan_card', 'passport'],
@@ -2186,6 +2198,7 @@ class ProfileController extends Controller
             'medicalFitnessCertificate' => ['medical_fitness_certificate'],
             'selfieVerification' => [],
         ];
+        $legacyRegistrationDocuments ??= $this->legacyRegistrationDocuments($profile);
 
         $profileColumns = Schema::getColumnListing($profile->getTable());
         $paths = [];
@@ -2197,14 +2210,69 @@ class ProfileController extends Controller
         foreach ($documentColumns[$key] ?? [] as $column) {
             $paths[] = $profile->profileDocuments?->{$column};
         }
+        $paths[] = $legacyRegistrationDocuments[$key] ?? null;
 
+        $fallbackPath = null;
         foreach ($paths as $path) {
-            if (is_string($path) && $this->localUploadPath($path)) {
+            if (! is_string($path) || trim($path) === '') {
+                continue;
+            }
+
+            $path = trim($path);
+            $fallbackPath ??= $path;
+            if ($this->localUploadPath($path)) {
                 return $path;
             }
         }
 
-        return null;
+        return $fallbackPath;
+    }
+
+    private function legacyRegistrationDocuments(Profile $profile): array
+    {
+        $table = 'melava_pending_registrations';
+        if (! Schema::hasTable($table)
+            || ! Schema::hasColumn($table, 'profile_id')
+            || ! Schema::hasColumn($table, 'id')
+            || ! Schema::hasColumn($table, 'registration_data')) {
+            return [];
+        }
+
+        $documents = [];
+        $registrations = DB::table($table)
+            ->where('profile_id', $profile->getKey())
+            ->orderByDesc('id')
+            ->pluck('registration_data');
+
+        foreach ($registrations as $registrationData) {
+            if (is_string($registrationData)) {
+                $registrationData = json_decode($registrationData, true);
+            }
+            if (! is_array($registrationData)) {
+                continue;
+            }
+
+            foreach (self::DOCUMENT_KEYS as $key) {
+                $path = $registrationData[$key] ?? null;
+                if (! is_string($path) || trim($path) === '') {
+                    continue;
+                }
+
+                if (! isset($documents[$key])) {
+                    $documents[$key] = trim($path);
+                } elseif (! $this->localUploadPath($documents[$key]) && $this->localUploadPath($path)) {
+                    $documents[$key] = trim($path);
+                }
+            }
+        }
+
+        return $documents;
+    }
+
+    private function documentFileAvailable($path): bool
+    {
+        return $this->localUploadPath($path) !== null
+            || (is_string($path) && preg_match('#^https?://#i', trim($path)) === 1);
     }
 
     private function deleteStoredFile($path): void
@@ -2329,6 +2397,31 @@ class ProfileController extends Controller
 
         if (str_starts_with($path, 'storage/')) {
             return url($path);
+        }
+
+        if (str_starts_with($path, 'uploads/')) {
+            $file = $this->localUploadPath($path);
+            if ($file) {
+                $storageRoot = realpath(storage_path('app/public'));
+                $storagePrefix = $storageRoot
+                    ? rtrim($storageRoot, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR
+                    : null;
+                if ($storagePrefix && strncmp($file, $storagePrefix, strlen($storagePrefix)) === 0) {
+                    $relativePath = substr($file, strlen($storagePrefix));
+
+                    return Storage::disk('public')->url(str_replace(DIRECTORY_SEPARATOR, '/', $relativePath));
+                }
+
+                $publicRoot = realpath(public_path());
+                $publicPrefix = $publicRoot
+                    ? rtrim($publicRoot, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR
+                    : null;
+                if ($publicPrefix && strncmp($file, $publicPrefix, strlen($publicPrefix)) === 0) {
+                    $relativePath = substr($file, strlen($publicPrefix));
+
+                    return url(str_replace(DIRECTORY_SEPARATOR, '/', $relativePath));
+                }
+            }
         }
 
         if (str_starts_with($path, 'candidate/')) {

@@ -156,7 +156,8 @@ function normalizeProfile(profile) {
       .map((document, index) => ({
         id: document.id ?? index,
         label: String(document.label || document.type || document.name || "Document"),
-        url: document.url || document.file_path || document.path || "",
+        url: document.available === false ? "" : document.url || document.file_path || document.path || "",
+        available: document.available !== false,
       })),
   };
 }
@@ -493,7 +494,14 @@ function Documents({ docs, onDelete, deletingId, canDelete }) {
             return (
               <li key={document.id}>
                 <span className="pd-doc-ic">{/birth/i.test(document.label) ? <FaCalendarAlt /> : <FaIdCard />}</span>
-                {url ? <a href={url} target="_blank" rel="noopener noreferrer">{document.label}</a> : <span>{document.label}</span>}
+                {url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer">{document.label}</a>
+                ) : (
+                  <span>
+                    {document.label}
+                    {!document.available ? " — reference saved, but file is missing from server storage" : ""}
+                  </span>
+                )}
                 {canDelete ? (
                   <button
                     type="button"

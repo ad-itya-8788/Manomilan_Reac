@@ -91,9 +91,9 @@ function Photo({ profile }) {
   const [broken, setBroken] = useState(false);
   const photoSrc = apiMediaUrl(getProfilePhoto(profile, ["photo_url", "photo", "profile_photo"]));
   if (!photoSrc || broken)
-    return <div className="pv-avatar" aria-hidden="true">{initials(profile.full_name)}</div>;
+    return <div className="pv-photo pv-photo-fallback" aria-hidden="true">{initials(profile.full_name)}</div>;
   return (
-    <div className="pv-avatar">
+    <div className="pv-photo">
       <img src={photoSrc} alt={profile.full_name} onError={() => setBroken(true)} />
     </div>
   );

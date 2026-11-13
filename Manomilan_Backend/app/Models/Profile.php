@@ -471,12 +471,11 @@ class Profile extends Model
         $unverifiedDocuments = array_values(array_diff($uploaded, $verified));
         $documentsAllVerified = empty($missingRequired) && empty($unverifiedDocuments);
         $paymentVerified = $this->hasVerifiedPayment();
-        $fullyVerified = $documentsAllVerified && $paymentVerified;
 
         return [
-            'status' => $fullyVerified ? 'Completed' : 'Pending',
-            'display_status' => $fullyVerified ? 'Verified' : 'Pending',
-            'is_verified' => $fullyVerified,
+            'status' => $documentsAllVerified ? 'Completed' : 'Pending',
+            'display_status' => $documentsAllVerified ? 'Verified' : 'Pending',
+            'is_verified' => $documentsAllVerified,
             'documents_total' => count($uploaded),
             'documents_verified' => count($verified),
             'documents_pending' => count($uploaded) - count($verified),

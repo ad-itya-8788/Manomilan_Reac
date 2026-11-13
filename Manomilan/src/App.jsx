@@ -38,6 +38,7 @@ const MelavaPayments = lazy(() => import("./admin/pages/MelavaPayments.jsx"));
 const WorkshopRegistrations = lazy(() => import("./admin/pages/WorkshopRegistrations.jsx"));
 const MelavaBioDataPage = lazy(() => import("./admin/pages/MelavaBioDataPage.jsx"));
 const MelavaCampaigns = lazy(() => import("./admin/pages/MelavaCampaigns.jsx"));
+const IdCards = lazy(() => import("./admin/pages/IdCards/IdCards.jsx"));
 const WorkshopEvents = lazy(() => import("./admin/pages/workshopEvents/WorkshopEvents.jsx"));
 const Reports = lazy(() => import("./admin/pages/Reports.jsx"));
 const ResetPasswords = lazy(() => import("./admin/pages/ResetPasswords.jsx"));
@@ -92,6 +93,7 @@ const ROUTES = {
   "/admin/melava": MelavaPayments,
   "/admin/workshop": WorkshopRegistrations,
   "/admin/melava-campaigns": MelavaCampaigns,
+  "/admin/id-cards": IdCards,
   "/admin/workshop-events": WorkshopEvents,
   "/admin/reset-passwords": ResetPasswords,
   "/admin/report": Reports,

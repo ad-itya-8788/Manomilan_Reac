@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Auth\RegisterController;
 use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\EnquiryController;
 use App\Http\Controllers\Api\HomeController;
+use App\Http\Controllers\Api\IdCardController;
 use App\Http\Controllers\Api\InterestController;
 use App\Http\Controllers\Api\MelavaRegistrationController;
 use App\Http\Controllers\Api\MelavaCampaignController;
@@ -191,6 +192,17 @@ Route::prefix('admin/success-stories')->group(function () {
     Route::put('/melava-campaigns/{id}', [MelavaCampaignController::class, 'update']);
     Route::delete('/melava-campaigns/{id}', [MelavaCampaignController::class, 'destroy']);
     Route::put('/melava-campaigns/{id}/status', [MelavaCampaignController::class, 'updateStatus']);
+
+    Route::prefix('id-cards')->group(function () {
+        Route::get('/candidates', [IdCardController::class, 'candidates']);
+        Route::get('/cards', [IdCardController::class, 'cards']);
+        Route::get('/assignment/preview', [IdCardController::class, 'previewAssignment']);
+        Route::post('/assign', [IdCardController::class, 'assign']);
+        Route::get('/design', [IdCardController::class, 'showDesign']);
+        Route::put('/design', [IdCardController::class, 'saveDesign']);
+        Route::put('/design/reset', [IdCardController::class, 'resetDesign']);
+        Route::get('/photo/{profile}', [IdCardController::class, 'photo'])->whereNumber('profile');
+    });
 
     Route::get('/workshop-registrations', [WorkshopRegistrationController::class, 'index']);
     Route::get('/workshop-registrations/{id}', [WorkshopRegistrationController::class, 'show'])->whereNumber('id');

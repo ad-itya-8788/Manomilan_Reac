@@ -24,7 +24,12 @@ export default function AgeRangeFilter({
   const hasValue = from !== "" || to !== "";
 
   return (
-    <div className={`ui-age ${error ? "invalid" : ""}`.trim()} role="group" aria-label="Filter by age range">
+    <div
+      className={`ui-age ${error ? "invalid" : ""}`.trim()}
+      role="group"
+      aria-label="Filter by age range"
+      title="Filter profiles by their age, calculated from date of birth"
+    >
       <label className="ui-age-label">
         From age
         <input

@@ -31,14 +31,6 @@ const GENDERS = [
   { value: "groom", label: "Groom" },
 ];
 
-const REG_TYPES = [
-  { value: "all", label: "All Types" },
-  { value: "quick", label: "Quick Registration" },
-  { value: "melava", label: "Melava Registration" },
-  { value: "existing", label: "Existing Registration" },
-  { value: "melava_existing", label: "Melava + Existing Registrations" },
-];
-
 const PROFILE_VIEWS = {
   "/admin/profiles": { title: "Profile List", description: "Browse and manage registered profiles.", totalLabel: "Total Profiles" },
   "/admin/nri-profiles": { title: "NRI Profiles", description: "Profiles matching the existing NRI location criteria.", totalLabel: "Total NRI Profiles" },
@@ -119,9 +111,10 @@ export default function Profiles() {
   const isNriView = currentPath === "/admin/nri-profiles";
   const isInactiveView = currentPath === "/admin/inactive-profiles";
 
-  const [filters, setFilters] = useState({ gender: "all", reg_type: "all" });
+  const [filters, setFilters] = useState({ gender: "all" });
   const [search, setSearch] = useState("");
   const [ageInput, setAgeInput] = useState({ from: "", to: "" });
+  const [registrationDateInput, setRegistrationDateInput] = useState({ from: "", to: "" });
   const [sort, setSort] = useState({ by: "registration_date", order: "desc" });
   const [page, setPage] = useState(1);
 
@@ -184,11 +177,16 @@ export default function Profiles() {
   const ageError = ageFrom !== "" && ageTo !== "" && Number(ageFrom) > Number(ageTo)
     ? "Minimum age cannot be greater than maximum age."
     : "";
+  const registrationDateError = registrationDateInput.from !== "" &&
+    registrationDateInput.to !== "" &&
+    registrationDateInput.from > registrationDateInput.to
+    ? "Start registration date cannot be after end date."
+    : "";
 
   const reqId = useRef(0);
   const load = useCallback(async () => {
     const id = ++reqId.current;
-    if (ageError) {
+    if (ageError || registrationDateError) {
       setLoading(false);
       return;
     }
@@ -200,6 +198,8 @@ export default function Profiles() {
         q: activeQuery,
         age_from: ageFrom || undefined,
         age_to: ageTo || undefined,
+        registered_from: registrationDateInput.from || undefined,
+        registered_to: registrationDateInput.to || undefined,
         verification_status: verificationStatus,
         nri: isNriView ? "1" : undefined,
         inactive: isInactiveView ? "1" : undefined,
@@ -213,7 +213,7 @@ export default function Profiles() {
     } finally {
       if (id === reqId.current) setLoading(false);
     }
-  }, [filters, activeQuery, ageFrom, ageTo, ageError, sort, page, verificationStatus, isNriView, isInactiveView]);
+  }, [filters, activeQuery, ageFrom, ageTo, ageError, registrationDateInput, registrationDateError, sort, page, verificationStatus, isNriView, isInactiveView]);
 
   useEffect(() => {
     const timer = setTimeout(load, 0);
@@ -237,20 +237,22 @@ export default function Profiles() {
   const hasFilters = Boolean(
     activeQuery ||
     (filters.gender && filters.gender !== "all") ||
-    (filters.reg_type && filters.reg_type !== "all") ||
     ageFrom ||
-    ageTo,
+    ageTo ||
+    registrationDateInput.from ||
+    registrationDateInput.to,
   );
   const clearFilters = () => {
     setSearch("");
     setAgeInput({ from: "", to: "" });
-    setFilters({ gender: "all", reg_type: "all" });
+    setRegistrationDateInput({ from: "", to: "" });
+    setFilters({ gender: "all" });
     setPage(1);
   };
 
   const handleExport = async () => {
-    if (ageError) {
-      showToast("error", ageError);
+    if (ageError || registrationDateError) {
+      showToast("error", ageError || registrationDateError);
       return;
     }
     setExporting(true);
@@ -260,6 +262,8 @@ export default function Profiles() {
         q: activeQuery,
         age_from: ageFrom || undefined,
         age_to: ageTo || undefined,
+        registered_from: registrationDateInput.from || undefined,
+        registered_to: registrationDateInput.to || undefined,
         verification_status: verificationStatus,
         nri: isNriView ? "1" : undefined,
         sort_by: sort.by,
@@ -332,19 +336,59 @@ export default function Profiles() {
               placeholder="Search by Registration No, Name, Mobile, Date or Status"
               autoComplete="off"
               aria-label="Search profiles"
+              title="Search by registration number, name, mobile, registration date, or status"
             />
             {search && (
               <button type="button" onClick={() => { setSearch(""); setPage(1); }} aria-label="Clear search"><X size={16} /></button>
             )}
           </label>
 
-          <select className="ui-select" value={filters.gender} onChange={setFilter("gender")} aria-label="Filter by profile type">
+          <select
+            className="ui-select"
+            value={filters.gender}
+            onChange={setFilter("gender")}
+            aria-label="Filter profiles by gender"
+            title="Show all profiles, Brides, or Grooms"
+          >
             {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
           </select>
 
-          <select className="ui-select" value={filters.reg_type} onChange={setFilter("reg_type")} aria-label="Filter by registration type">
-            {REG_TYPES.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
-          </select>
+          <div
+            className={`ui-date-range ${registrationDateError ? "invalid" : ""}`.trim()}
+            role="group"
+            aria-label="Filter by registration date"
+            title="Filter by the profile creation timestamp"
+          >
+            <label className="ui-date-label">
+              Registered from
+              <input
+                type="date"
+                value={registrationDateInput.from}
+                max={registrationDateInput.to || undefined}
+                onChange={(event) => {
+                  setRegistrationDateInput((dates) => ({ ...dates, from: event.target.value }));
+                  setPage(1);
+                }}
+                aria-label="Registered from date"
+                title="Start date, based on when the profile was created"
+              />
+            </label>
+            <label className="ui-date-label">
+              Registered to
+              <input
+                type="date"
+                value={registrationDateInput.to}
+                min={registrationDateInput.from || undefined}
+                onChange={(event) => {
+                  setRegistrationDateInput((dates) => ({ ...dates, to: event.target.value }));
+                  setPage(1);
+                }}
+                aria-label="Registered to date"
+                title="End date, based on when the profile was created"
+              />
+            </label>
+            {registrationDateError ? <span className="ui-field-error" role="alert">{registrationDateError}</span> : null}
+          </div>
 
           <AgeRangeFilter
             from={ageInput.from}

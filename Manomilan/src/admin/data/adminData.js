@@ -6,6 +6,7 @@ export const menuItems = [
   { label: "Unverified Profiles", path: "/admin/unverified-profiles" },
   { label: "Melava Registrations", path: "/admin/melava" },
   { label: "Melava Events", path: "/admin/melava-campaigns" },
+  { label: "ID Cards", path: "/admin/id-cards" },
   { label: "Melava Workshop", path: "/admin/workshop-events" },
   { label: "Workshop Registration", path: "/admin/workshop" },
   { label: "Reset Passwords", path: "/admin/reset-passwords" },

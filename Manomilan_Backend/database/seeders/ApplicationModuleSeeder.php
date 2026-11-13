@@ -59,6 +59,14 @@ class ApplicationModuleSeeder extends Seeder
             'api_prefixes' => ['/melava-registrations', '/melava-campaigns'],
             'icon' => 'calendar-heart',
         ],
+        'ID Cards' => [
+            'key' => 'id_cards',
+            'description' => 'ID card assignment, design and Bio Data access for Aaryans Manomilan.',
+            'route' => '/admin/id-cards',
+            'frontend_routes' => ['/admin/id-cards'],
+            'api_prefixes' => ['/id-cards'],
+            'icon' => 'id-card',
+        ],
         'Website Registration' => [
             'key' => 'website_registration',
             'description' => 'Website Registration module for Aaryans Manomilan',

@@ -12,6 +12,7 @@ class ProfileMelavaRegistration extends Model
     protected $fillable = [
         'profile_id',
         'melava_campaign_id',
+        'unique_id_number',
         'is_booklet_req',
         'payment_screenshot',
         'payment_verified',
