@@ -115,7 +115,11 @@ export default function SuccessStories() {
 
   useEffect(() => {
     const controller = new AbortController();
-    request("/success-stories", { auth: false, signal: controller.signal })
+    request("/success-stories", {
+      auth: false,
+      signal: controller.signal,
+      timeoutMs: 15000,
+    })
       .then(response => {
         if (!Array.isArray(response.data)) {
           throw new Error("The stories response was not in the expected format.");
@@ -134,7 +138,14 @@ export default function SuccessStories() {
       })
       .catch(loadError => {
         if (controller.signal.aborted) return;
-        setError(loadError.message || "Unable to load success stories.");
+        const message = loadError?.message || "";
+        const isServerError = loadError?.status >= 500
+          || /sqlstate|unknown database|database|exception|stack trace/i.test(message);
+        setError(
+          isServerError
+            ? "We’re having trouble loading the stories right now. Please try again."
+            : message || "Unable to load success stories.",
+        );
         setLoading(false);
       });
 

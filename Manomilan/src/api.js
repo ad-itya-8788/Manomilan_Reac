@@ -225,7 +225,15 @@ const parseBody = async (response) => {
 
 export async function request(
   path,
-  { method = "GET", body, headers = {}, auth = true, raw = false, signal: externalSignal } = {},
+  {
+    method = "GET",
+    body,
+    headers = {},
+    auth = true,
+    raw = false,
+    signal: externalSignal,
+    timeoutMs = 60000,
+  } = {},
 ) {
   const url = /^https?:\/\//i.test(path)
     ? path
@@ -246,7 +254,7 @@ export async function request(
   } else {
     externalSignal?.addEventListener("abort", abortForExternalSignal, { once: true });
   }
-  const timeoutId = window.setTimeout(() => controller.abort(), 60000);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
   options.signal = controller.signal;
 
   if (body !== undefined && body !== null) {

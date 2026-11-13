@@ -24,6 +24,25 @@ class SuccessStoryController extends Controller
     {
         try {
             $stories = SuccessStory::where('status', 'Active')
+                ->select([
+                    'id',
+                    'groom_name',
+                    'bride_name',
+                    'marriage_date',
+                    'city',
+                    'state',
+                    'groom_photo',
+                    'bride_photo',
+                    'couple_photo',
+                    'wedding_photo',
+                    'story_title',
+                    'short_description',
+                    'full_story',
+                    'family_message',
+                    'rating',
+                    'is_featured',
+                    'display_order',
+                ])
                 ->orderByDesc('is_featured')
                 ->orderBy('display_order')
                 ->latest()
