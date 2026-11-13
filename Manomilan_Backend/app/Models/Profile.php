@@ -220,6 +220,11 @@ class Profile extends Model
         'special_cases',
         'about_me',
         'photos',
+        'profile_photo',
+        'full_body_photo',
+        'half_body_photo',
+        'selfie_photo',
+        'candidate_photos',
         'monthly_income',
         'annual_income',
         'personal_medical_history',
@@ -361,7 +366,11 @@ class Profile extends Model
     protected $casts = [
         'additional_photos' => 'array',
         'languages' => 'array',
-        'photos' => 'array',
+        'candidate_photos' => 'array',
+        'profile_photo' => 'string',
+        'full_body_photo' => 'string',
+        'half_body_photo' => 'string',
+        'selfie_photo' => 'string',
         'addresses' => 'array',
         'has_spectacles' => 'boolean',
         'height_cm' => 'decimal:2',
@@ -509,16 +518,7 @@ class Profile extends Model
 
     public function additionalPhotoPaths(): array
     {
-        $photos = $this->photos;
-        if (! is_array($photos)) {
-            $photos = is_string($photos) && $photos !== '' ? (json_decode($photos, true) ?: []) : [];
-        }
-        if (! is_array($photos)) {
-            $photos = [];
-        }
-
         $sources = [
-            $photos['additional_photos'] ?? $photos['additionalPhotos'] ?? null,
             $this->getAttribute('additional_photos'),
         ];
 
@@ -548,6 +548,57 @@ class Profile extends Model
         }
 
         return array_values(array_unique($paths));
+    }
+
+    public function getPhotosAttribute(): array
+    {
+        return array_filter([
+            'profile_photo' => $this->photoPath('profile_photo'),
+            'full_body_photo' => $this->photoPath('full_body_photo'),
+            'half_body_photo' => $this->photoPath('half_body_photo'),
+            'selfie_photo' => $this->photoPath('selfie_photo'),
+            'candidate_photos' => $this->candidate_photos,
+            'additional_photos' => $this->additional_photos,
+        ], fn ($value) => $value !== null && $value !== []);
+    }
+
+    public function setPhotosAttribute($value): void
+    {
+        $photos = is_array($value) ? $value : [];
+
+        foreach (['profile_photo', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $column) {
+            if (array_key_exists($column, $photos)) {
+                $this->setAttribute($column, $photos[$column]);
+            }
+        }
+
+        if (array_key_exists('candidate_photos', $photos)) {
+            $this->candidate_photos = $photos['candidate_photos'];
+        }
+
+        if (array_key_exists('additional_photos', $photos)) {
+            $this->additional_photos = $photos['additional_photos'];
+        }
+    }
+
+    public function photoPath(string $key): ?string
+    {
+        $value = $this->getAttribute($key);
+        if (is_string($value) && trim($value) !== '') {
+            return trim($value);
+        }
+
+        return null;
+    }
+
+    public function photoPaths(): array
+    {
+        return [
+            'profile_photo' => $this->photoPath('profile_photo'),
+            'full_body_photo' => $this->photoPath('full_body_photo'),
+            'half_body_photo' => $this->photoPath('half_body_photo'),
+            'selfie_photo' => $this->photoPath('selfie_photo'),
+        ];
     }
 
     public function profilePhotoWithFallback($primary): ?string
@@ -664,13 +715,13 @@ class Profile extends Model
                 case 'source_of_information':
                     return $this->source_of_information ?: ($addresses['metadata']['source_of_information'] ?? null);
                 case 'profilePhoto':
-                    return $photos['profile_photo'] ?? $photos[0] ?? null;
+                    return $this->photoPath('profile_photo') ?? $photos[0] ?? null;
                 case 'full_body_photo':
-                    return $photos['full_body_photo'] ?? null;
+                    return $this->photoPath('full_body_photo');
                 case 'half_body_photo':
-                    return $photos['half_body_photo'] ?? null;
+                    return $this->photoPath('half_body_photo');
                 case 'selfie_photo':
-                    return $photos['selfie_photo'] ?? null;
+                    return $this->photoPath('selfie_photo');
                 case 'groomOrBride':
                     return $this->groomorbride;
                 case 'religion':
@@ -1097,13 +1148,13 @@ class Profile extends Model
                 case 'referenceContactNumber':
                     return $addresses['reference']['contact'] ?? null;
                 case 'profilePhoto':
-                    return $photos['profile_photo'] ?? null;
+                    return $this->photoPath('profile_photo');
                 case 'full_body_photo':
-                    return $photos['full_body_photo'] ?? null;
+                    return $this->photoPath('full_body_photo');
                 case 'half_body_photo':
-                    return $photos['half_body_photo'] ?? null;
+                    return $this->photoPath('half_body_photo');
                 case 'selfie_photo':
-                    return $photos['selfie_photo'] ?? null;
+                    return $this->photoPath('selfie_photo');
                 case 'identificationProof':
                     return $docs?->aadhaar_card ?: $docs?->pan_card ?: $docs?->passport;
                 case 'birthDateProof':

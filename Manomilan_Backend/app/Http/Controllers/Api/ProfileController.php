@@ -291,7 +291,11 @@ class ProfileController extends Controller
                 'profiles.languages',
                 'profiles.special_cases',
                 'profiles.about_me',
-                'profiles.photos',
+                'profiles.profile_photo',
+                'profiles.full_body_photo',
+                'profiles.half_body_photo',
+                'profiles.selfie_photo',
+                'profiles.candidate_photos',
                 'profiles.additional_photos',
                 'profiles.monthly_income',
                 'profiles.annual_income',
@@ -651,8 +655,12 @@ class ProfileController extends Controller
                 ];
             };
 
-            $storedPhotos = is_array($profile->photos) ? $profile->photos : [];
-            $primaryPhoto = $storedPhotos['profile_photo'] ?? $storedPhotos['profilePicture'] ?? $storedPhotos[0] ?? $profile->profilePhoto ?? null;
+            $storedPhotos = $profile->photos;
+            $primaryPhoto = $profile->photoPath('profile_photo')
+                ?? $storedPhotos['profilePicture']
+                ?? $storedPhotos[0]
+                ?? $profile->profilePhoto
+                ?? null;
             $profilePhoto = $profile->profilePhotoWithFallback($primaryPhoto);
             if (is_string($profilePhoto)) {
                 $addPhoto('Profile Photo', $profilePhoto);
@@ -675,6 +683,9 @@ class ProfileController extends Controller
                 'serial_no' => null,
                 'full_name' => $profile->full_name,
                 'profile_photo' => $profilePhoto,
+                'full_body_photo' => $profile->photoPath('full_body_photo'),
+                'half_body_photo' => $profile->photoPath('half_body_photo'),
+                'selfie_photo' => $profile->photoPath('selfie_photo'),
                 'photo' => $profilePhoto,
                 'photos' => $photos,
                 'mobile' => $profile->user?->username ?? $profile->phone,
@@ -1168,7 +1179,10 @@ class ProfileController extends Controller
                 $addresses['reference'] = $reference;
                 $locked->addresses = $addresses;
 
-                $photoPaths = is_array($locked->photos) ? $locked->photos : [];
+                $photoPaths = $locked->photos;
+                foreach (['profile_photo', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $photoColumn) {
+                    $photoPaths[$photoColumn] = $locked->photoPath($photoColumn);
+                }
                 $knownPhotoPaths = $this->profilePhotoPaths($locked, $photoPaths);
                 $removePhotoPaths = array_values(array_intersect(
                     $knownPhotoPaths,
@@ -1222,12 +1236,16 @@ class ProfileController extends Controller
                             $path
                         ));
                     } else {
-                        $oldPath = $photoPaths[$key] ?? null;
+                        $oldPath = $locked->photoPath($key);
                         if (is_string($oldPath) && $oldPath !== $path) {
                             $oldPhotoPaths[] = $oldPath;
                         }
-                        $photoPaths[$key] = $path;
+                        $locked->setAttribute($key, $path);
+                        unset($photoPaths[$key]);
                     }
+                }
+                foreach (['profile_photo', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $photoColumn) {
+                    unset($photoPaths[$photoColumn]);
                 }
                 $locked->photos = $photoPaths;
                 $locked->save();
@@ -1419,8 +1437,11 @@ class ProfileController extends Controller
             $religion = $profile->religionDetails;
             $partnerPreference = $profile->partnerPreferences;
             $latestMelava = $profile->profileMelavaRegistrations->sortByDesc('id')->first();
-            $photos = is_array($profile->photos) ? $profile->photos : [];
-            $photo = $photos['profile_photo'] ?? $photos['profilePicture'] ?? $photos[0] ?? $profile->profile_photo ?? $profile->profilePhoto;
+            $photos = $profile->photos;
+            $photo = $profile->photoPath('profile_photo')
+                ?? $photos['profilePicture']
+                ?? $photos[0]
+                ?? $profile->profilePhoto;
             $photo = $profile->profilePhotoWithFallback($photo);
             $birthDate = $profile->birth_date ?: $profile->birthDate ?: $latestMelava?->birthDate;
             $height = $profile->height_cm
@@ -1784,7 +1805,7 @@ class ProfileController extends Controller
         }
 
         $profile->loadMissing(['profileDocuments', 'user']);
-        $storedPhotos = is_array($profile->photos) ? $profile->photos : [];
+        $storedPhotos = $profile->photos;
         $profilePhoto = $storedPhotos['profile_photo'] ?? $storedPhotos[0] ?? $profile->profilePhoto;
         $profilePhoto = $profile->profilePhotoWithFallback($profilePhoto);
         $verification = DocumentVerification::firstOrCreate(['profile_id' => $profile->id]);
@@ -1807,7 +1828,10 @@ class ProfileController extends Controller
                 'registration_number' => $profile->reg_id ?: $profile->profile_id ?: $profile->registration_number,
                 'registration_date' => optional($profile->created_at)->format('d M, Y'),
                 'photo_url' => $this->fileUrl(is_string($profilePhoto) ? $profilePhoto : null),
-                'profile_photo' => is_string($profilePhoto) ? $profilePhoto : null,
+                'profile_photo' => $profile->photoPath('profile_photo'),
+                'full_body_photo' => $profile->photoPath('full_body_photo'),
+                'half_body_photo' => $profile->photoPath('half_body_photo'),
+                'selfie_photo' => $profile->photoPath('selfie_photo'),
             ],
             'documents' => $documents,
         ]);
@@ -1892,7 +1916,7 @@ class ProfileController extends Controller
         $employment = $profile->employments->sortByDesc('id')->first();
         $religion = $profile->religionDetails;
         $preference = $profile->partnerPreferences;
-        $photoPaths = is_array($profile->photos) ? $profile->photos : (is_string($profile->photos) && $profile->photos ? json_decode($profile->photos, true) : []);
+        $photoPaths = $profile->photos;
         if (! is_array($photoPaths)) {
             $photoPaths = [];
         }
@@ -1900,7 +1924,10 @@ class ProfileController extends Controller
         if (! is_array($addresses)) {
             $addresses = [];
         }
-        $profilePhoto = $photoPaths['profile_photo'] ?? $photoPaths['profilePicture'] ?? $photoPaths[0] ?? $profile->profile_photo ?? null;
+        $profilePhoto = $profile->photoPath('profile_photo')
+            ?? $photoPaths['profilePicture']
+            ?? $photoPaths[0]
+            ?? null;
         $profilePhoto = $profile->profilePhotoWithFallback($profilePhoto);
 
         $normalizeList = function ($value) {
@@ -1946,9 +1973,9 @@ class ProfileController extends Controller
             'education' => $education?->degree_name ?: $education?->education_level,
             'profession' => $employment?->profession,
             'age' => $profile->birth_date ? Carbon::parse($profile->birth_date)->age : null,
-            'full_body_photo_url' => $this->fileUrl($photoPaths['full_body_photo'] ?? $profile->full_body_photo ?? null),
-            'half_body_photo_url' => $this->fileUrl($photoPaths['half_body_photo'] ?? $profile->half_body_photo ?? null),
-            'selfie_photo_url' => $this->fileUrl($photoPaths['selfie_photo'] ?? $profile->selfie_photo ?? null),
+            'full_body_photo_url' => $this->fileUrl($profile->photoPath('full_body_photo')),
+            'half_body_photo_url' => $this->fileUrl($profile->photoPath('half_body_photo')),
+            'selfie_photo_url' => $this->fileUrl($profile->photoPath('selfie_photo')),
             'profile_photo_url' => $this->fileUrl(is_string($profilePhoto) ? $profilePhoto : null),
             'additional_photo_urls' => collect($additionalList)
                 ->map(fn ($path) => $this->fileUrl(is_string($path) ? $path : null))

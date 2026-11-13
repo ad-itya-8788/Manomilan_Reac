@@ -463,10 +463,7 @@ class HomeController extends Controller
             ];
 
             if ($profilePhotoName) {
-                $profileData['profile_photo'] = $profilePhotoName;
-
-                // keep this only if this column exists in your DB
-                $profileData['profilePhoto'] = 'profile_photos/' . $profilePhotoName;
+                $profileData['profile_photo'] = 'profile_photos/' . $profilePhotoName;
             }
 
             // Map gender to groomOrBride

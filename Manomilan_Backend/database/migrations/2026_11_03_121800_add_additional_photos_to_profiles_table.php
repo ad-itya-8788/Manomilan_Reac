@@ -10,7 +10,12 @@ return new class extends Migration
     {
         if (! Schema::hasColumn('profiles', 'additional_photos')) {
             Schema::table('profiles', function (Blueprint $table): void {
-                $table->json('additional_photos')->nullable()->after('photos');
+                $column = $table->json('additional_photos')->nullable();
+                if (Schema::hasColumn('profiles', 'photos')) {
+                    $column->after('photos');
+                } else {
+                    $column->after('about_me');
+                }
             });
         }
     }

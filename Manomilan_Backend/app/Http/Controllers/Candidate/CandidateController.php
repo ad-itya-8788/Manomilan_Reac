@@ -122,13 +122,10 @@ abstract class CandidateController extends Controller
         $verification = DocumentVerification::where('profile_id', $profile->id)->first();
         $preference = $user->preference ?: $profile->partnerPreferences;
 
-        $photos = is_array($profile->photos) ? $profile->photos : (is_string($profile->photos) && $profile->photos ? json_decode($profile->photos, true) : []);
-        if (! is_array($photos)) {
-            $photos = [];
-        }
+        $photos = $profile->photos;
 
         $getPhoto = function ($key) use ($photos, $profile) {
-            $photo = $photos[$key] ?? null;
+            $photo = $profile->photoPath($key);
             if (filled($photo)) {
                 return $photo;
             }
@@ -188,6 +185,10 @@ abstract class CandidateController extends Controller
             'birth_date' => $profile->birth_date ?: $profile->birthDate,
             'age' => ($profile->birth_date ?: $profile->birthDate) ? Carbon::parse($profile->birth_date ?: $profile->birthDate)->age : null,
             'photo_url' => $this->fileUrl($getPhoto('profile_photo')),
+            'profile_photo' => $getPhoto('profile_photo'),
+            'full_body_photo' => $getPhoto('full_body_photo'),
+            'half_body_photo' => $getPhoto('half_body_photo'),
+            'selfie_photo' => $getPhoto('selfie_photo'),
             'full_body_photo_url' => $this->fileUrl($getPhoto('full_body_photo')),
             'half_body_photo_url' => $this->fileUrl($getPhoto('half_body_photo')),
             'selfie_photo_url' => $this->fileUrl($getPhoto('selfie_photo')),
@@ -226,7 +227,7 @@ abstract class CandidateController extends Controller
         }
 
         $details = $this->profileDetails($profile);
-        $profilePhotos = is_array($profile->photos) ? $profile->photos : [];
+        $profilePhotos = $profile->photos;
         $education = $profile->educations?->sortByDesc('id')->first();
         $employment = $profile->employments?->sortByDesc('id')->first();
         $religion = $profile->religionDetails;

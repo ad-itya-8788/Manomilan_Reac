@@ -205,13 +205,7 @@ class NotificationController extends CandidateController
 
             if ($interest?->user?->profile) {
                 $senderProfile = $interest->user->profile;
-                $senderPhoto = is_array($senderProfile->photos)
-                    ? ($senderProfile->photos['profile_photo']
-                        ?? $senderProfile->photos['profilePhoto']
-                        ?? $senderProfile->photos['profilePicture']
-                        ?? $senderProfile->photos[0]
-                        ?? null)
-                    : null;
+                $senderPhoto = $senderProfile->photoPath('profile_photo');
                 $data = array_merge($data, [
                     'profile_id' => $senderProfile->id,
                     'actor_profile_id' => $senderProfile->id,

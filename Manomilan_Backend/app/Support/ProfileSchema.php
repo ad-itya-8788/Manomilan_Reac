@@ -23,7 +23,11 @@ class ProfileSchema
         $table->json('languages')->nullable();
         $table->text('special_cases')->nullable();
         $table->text('about_me')->nullable();
-        $table->json('photos')->nullable();
+        $table->string('profile_photo')->nullable();
+        $table->string('full_body_photo')->nullable();
+        $table->string('half_body_photo')->nullable();
+        $table->string('selfie_photo')->nullable();
+        $table->json('candidate_photos')->nullable();
         $table->decimal('monthly_income', 15, 2)->nullable();
         $table->decimal('annual_income', 15, 2)->nullable();
         $table->text('personal_medical_history')->nullable();

@@ -8,7 +8,10 @@ const normalizeCandidateMedia = (value, key = "") => {
       : value.map((item) => normalizeCandidateMedia(item));
   }
   if (!value || typeof value !== "object") {
-    return key === "photo_url" || key === "file_url" || key.endsWith("_photo_url")
+    return key === "photo_url"
+      || key === "file_url"
+      || key.endsWith("_photo_url")
+      || ["profile_photo", "full_body_photo", "half_body_photo", "selfie_photo"].includes(key)
       ? apiMediaUrl(value)
       : value;
   }

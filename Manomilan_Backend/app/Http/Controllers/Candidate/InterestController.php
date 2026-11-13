@@ -160,13 +160,7 @@ class InterestController extends CandidateController
 
             $interest->load('profile');
             $senderName = $me->full_name ?: $user->name ?: 'A candidate';
-            $senderPhoto = is_array($me->photos)
-                ? ($me->photos['profile_photo']
-                    ?? $me->photos['profilePhoto']
-                    ?? $me->photos['profilePicture']
-                    ?? $me->photos[0]
-                    ?? null)
-                : null;
+            $senderPhoto = $me->photoPath('profile_photo');
             $this->notifyUser(
                 $profile->user,
                 'interest_received',

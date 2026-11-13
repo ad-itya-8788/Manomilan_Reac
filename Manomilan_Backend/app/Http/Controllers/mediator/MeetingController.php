@@ -1422,7 +1422,7 @@ $comparison = [
 */
 
 return response()->json(array_merge($profile->toArray(), [
-    'profilePhoto' => asset('storage/' . $profile->profilePhoto),
+    'profilePhoto' => asset('storage/' . $profile->photoPath('profile_photo')),
     'match' => [
         'score' => $score,
         'primaryScore' => $score . '%',

@@ -1153,7 +1153,7 @@ class ProfilesController extends Controller
                 'fullName' => $profile->fullName,
                 'profile_id' => $profile->profile_id,
                 'groomOrBride' => $profile->groomOrBride,
-                'profilePhoto' => $profile->profilePhoto,
+                'profilePhoto' => $profile->photoPath('profile_photo'),
                 'age' => $age,
                 'height' => $profile->height,
                 'education' => $profile->education,
@@ -1320,7 +1320,7 @@ class ProfilesController extends Controller
             'financial_background' => 'nullable|string',
             'age_from' => 'nullable|numeric',
             'age_to' => 'nullable|numeric',
-            'profilePhoto' => $profile->profilePhoto ? 'nullable|image|mimes:jpeg,png,jpg,gif|max:51200' : 'required|image|mimes:jpeg,png,jpg,gif|max:51200',
+            'profilePhoto' => $profile->photoPath('profile_photo') ? 'nullable|image|mimes:jpeg,png,jpg,gif|max:51200' : 'required|image|mimes:jpeg,png,jpg,gif|max:51200',
             'additionalPhotos' => 'nullable|array|max:4',
             'additionalPhotos.*' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:51200',
             'identificationProof' => $profile->identificationProof ? 'nullable|file|mimes:pdf,jpg,png,jpeg|max:51200' : 'required|file|mimes:pdf,jpg,png,jpeg|max:51200',
@@ -1387,10 +1387,11 @@ class ProfilesController extends Controller
 
         // Handle Profile Photo Upload
         if ($request->hasFile('profilePhoto')) {
-            if ($profile->profilePhoto && \Illuminate\Support\Facades\Storage::disk('public')->exists($profile->profilePhoto)) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($profile->profilePhoto);
+            $oldProfilePhoto = $profile->photoPath('profile_photo');
+            if ($oldProfilePhoto && \Illuminate\Support\Facades\Storage::disk('public')->exists($oldProfilePhoto)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($oldProfilePhoto);
             }
-            $data['profilePhoto'] = $request->file('profilePhoto')->store('profile_photos', 'public');
+            $data['profile_photo'] = $request->file('profilePhoto')->store('profile_photos', 'public');
         }
 
         // Handle Proof Documents
@@ -1917,7 +1918,9 @@ class ProfilesController extends Controller
         }
 
         // Check if the document exists
-        $filePath = $profile->$documentType;
+        $filePath = $documentType === 'profilePhoto'
+            ? $profile->photoPath('profile_photo')
+            : $profile->$documentType;
 
         // DELETE PROFILE PHOTO
         if ($documentType == 'profilePhoto') {
@@ -1930,7 +1933,7 @@ class ProfilesController extends Controller
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($filePath);
             }
 
-            $profile->profilePhoto = null;
+            $profile->profile_photo = null;
 
             $profile->save();
 

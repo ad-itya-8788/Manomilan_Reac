@@ -53,7 +53,11 @@ class ProfileCompletionTest extends TestCase
             $table->boolean('has_medical_history')->nullable();
             $table->string('source_of_information')->nullable();
             $table->string('marital_status')->nullable();
-            $table->json('photos')->nullable();
+            $table->string('profile_photo')->nullable();
+            $table->string('full_body_photo')->nullable();
+            $table->string('half_body_photo')->nullable();
+            $table->string('selfie_photo')->nullable();
+            $table->json('candidate_photos')->nullable();
             $table->json('addresses')->nullable();
             $table->unsignedTinyInteger('profile_completion')->nullable();
             $table->timestamps();

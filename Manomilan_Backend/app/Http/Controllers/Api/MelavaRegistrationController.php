@@ -210,7 +210,7 @@ class MelavaRegistrationController extends Controller
             $registrationData = json_decode($pending->registration_data, true) ?: [];
             $files = $registrationData['_pending_files'] ?? [];
             $profile?->loadMissing('profileDocuments');
-            $photos = is_array($profile?->photos) ? $profile->photos : [];
+            $photos = $profile?->photos ?? [];
             $draftUrl = function (string $fileKey, string $dataKey, ?string $profilePath = null) use ($files, $registrationData): string {
                 $path = $files[$fileKey] ?? $registrationData[$dataKey] ?? $profilePath;
                 return $this->fileUrl(request(), is_string($path) ? $path : null);
@@ -259,7 +259,7 @@ class MelavaRegistrationController extends Controller
                 'preference', 'partnerPreferences', 'educations', 'employments', 'profileDocuments',
                 'religionDetails', 'familyDetails', 'user',
             ]);
-            $photos = is_array($profile->photos) ? $profile->photos : [];
+            $photos = $profile->photos;
             $latestEducation = $profile->educations->last();
             $latestEmployment = $profile->employments->last();
             $religion = $profile->religionDetails;
@@ -828,7 +828,7 @@ class MelavaRegistrationController extends Controller
     {
         $profile ??= new Profile();
         $pendingFiles = $this->pendingFiles($request);
-        $photos = is_array($profile->photos) ? $profile->photos : [];
+        $photos = $profile->photos;
         foreach ([
             'profilePhoto' => 'profile_photo',
             'full_body_photo' => 'full_body_photo',
@@ -875,6 +875,11 @@ class MelavaRegistrationController extends Controller
                 )
             ));
         }
+        $individualPhotoPaths = [];
+        foreach (['profile_photo', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $photoColumn) {
+            $individualPhotoPaths[$photoColumn] = $photos[$photoColumn] ?? $profile->{$photoColumn};
+            unset($photos[$photoColumn]);
+        }
 
         $profile->fill([
             'full_name' => $data['fullName'] ?? $profile->full_name,
@@ -901,6 +906,10 @@ class MelavaRegistrationController extends Controller
             'source_of_information' => $data['source_of_information'] ?? null,
             'marital_status' => $data['maritalStatus'] ?? null,
             'photos' => $photos,
+            'profile_photo' => $individualPhotoPaths['profile_photo'],
+            'full_body_photo' => $individualPhotoPaths['full_body_photo'],
+            'half_body_photo' => $individualPhotoPaths['half_body_photo'],
+            'selfie_photo' => $individualPhotoPaths['selfie_photo'],
             'created_by' => $profile->created_by ?: $user->id,
             'profile_creator_name' => $data['profileCreatorName'] ?? $profile->profile_creator_name,
             'creator_relation' => $data['profileCreatorRelation'] ?? $profile->creator_relation,
@@ -1311,9 +1320,7 @@ class MelavaRegistrationController extends Controller
         $profile = $registration->profile;
         $employment = $profile?->employments?->sortByDesc('id')->first();
         $education = $profile?->educations?->sortByDesc('id')->first();
-        $profilePhoto = $profile && is_array($profile->photos)
-            ? ($profile->photos['profile_photo'] ?? $profile->photos['profilePicture'] ?? $profile->photos[0] ?? null)
-            : null;
+        $profilePhoto = $profile?->photoPath('profile_photo');
         $profilePhoto = $profile?->profilePhotoWithFallback($profilePhoto);
         $data = [
             'id' => $registration->id,

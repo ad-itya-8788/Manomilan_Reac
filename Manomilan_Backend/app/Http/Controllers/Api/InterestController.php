@@ -171,8 +171,7 @@ class InterestController extends Controller
             return null;
         }
 
-        $photos = is_array($profile->photos) ? $profile->photos : [];
-        $photoPath = $photos['profile_photo'] ?? $photos[0] ?? null;
+        $photoPath = $profile->photoPath('profile_photo');
         $employment = $profile->employments()->latest('id')->first();
         $education = $profile->educations()->latest('id')->first();
 

@@ -93,7 +93,7 @@ class DashboardController extends CandidateController
             'gender' => $this->profileGender($profile),
             'age' => $profile->birth_date ? Carbon::parse($profile->birth_date)->age : null,
             'photo_url' => $this->fileUrl(
-                is_array($profile->photos) ? ($profile->photos['profile_photo'] ?? $profile->photos[0] ?? null) : null
+                $profile->photoPath('profile_photo')
             ),
             'city' => $this->profileCity($profile),
             'profile_completion' => (int) $profile->profile_completion,

@@ -80,7 +80,7 @@ class HomeController extends Controller
                     ->map(function (Profile $profile): array {
                         $employment = $profile->employments->sortByDesc('id')->first();
                         $education = $profile->educations->sortByDesc('id')->first();
-                        $photo = is_array($profile->photos) ? ($profile->photos['profile_photo'] ?? $profile->photos[0] ?? null) : null;
+                        $photo = $profile->photoPath('profile_photo');
                         $photo = $profile->profilePhotoWithFallback($photo);
 
                         return [
@@ -590,11 +590,11 @@ class HomeController extends Controller
                         'profile_id' => $profile->reg_id,
                         'full_name' => $profile->full_name,
                         'gender' => $profile->groomorbride,
-                        'photo_url' => $this->profilePhotoUrl(
-                            is_array($profile->photos)
-                                ? ($profile->photos['profile_photo'] ?? $profile->photos[0] ?? null)
-                                : null
-                        ),
+                        'photo_url' => $this->profilePhotoUrl($profile->photoPath('profile_photo')),
+                        'profile_photo' => $profile->photoPath('profile_photo'),
+                        'full_body_photo' => $profile->photoPath('full_body_photo'),
+                        'half_body_photo' => $profile->photoPath('half_body_photo'),
+                        'selfie_photo' => $profile->photoPath('selfie_photo'),
                         'profile_completion' => null,
                         'verification_status' => $profile->verification_status,
                         'birth_date' => $profile->birth_date,
@@ -605,7 +605,7 @@ class HomeController extends Controller
                         'profession' => $profile->employments()->latest('id')->value('profession'),
                         'has_family' => $profile->familyDetails()->exists(),
                         'has_education' => $profile->educations()->exists(),
-                        'has_photos' => ! empty($profile->photos),
+                        'has_photos' => filled($profile->photoPath('profile_photo')),
                         'has_preferences' => $profile->partnerPreferences()->exists()
                             || $user->preference()->exists(),
                     ] : null,

@@ -224,10 +224,8 @@ class ProfileController extends CandidateController
 
             DB::transaction(function () use ($profile, $newPath, &$oldPath) {
                 $locked = Profile::lockForUpdate()->find($profile->id);
-                $photos = is_array($locked->photos) ? $locked->photos : [];
-                $oldPath = $photos['profile_photo'] ?? $photos[0] ?? null;
-                $photos['profile_photo'] = $newPath;
-                $locked->photos = $photos;
+                $oldPath = $locked->photoPath('profile_photo');
+                $locked->profile_photo = $newPath;
                 $locked->save();
 
                 $this->refreshCompletion($locked);
@@ -268,10 +266,8 @@ class ProfileController extends CandidateController
         try {
             DB::transaction(function () use ($profile, &$oldPath) {
                 $locked = Profile::lockForUpdate()->find($profile->id);
-                $photos = is_array($locked->photos) ? $locked->photos : [];
-                $oldPath = $photos['profile_photo'] ?? $photos[0] ?? null;
-                unset($photos['profile_photo'], $photos[0]);
-                $locked->photos = $photos ?: null;
+                $oldPath = $locked->photoPath('profile_photo');
+                $locked->profile_photo = null;
                 $locked->save();
 
                 $this->refreshCompletion($locked);
@@ -332,14 +328,12 @@ class ProfileController extends CandidateController
 
             DB::transaction(function () use ($profile, $stored, &$oldPaths) {
                 $locked = Profile::lockForUpdate()->findOrFail($profile->id);
-                $photos = is_array($locked->photos) ? $locked->photos : [];
 
                 foreach ($stored as $field => $path) {
-                    $oldPaths[] = $photos[$field] ?? null;
-                    $photos[$field] = $path;
+                    $oldPaths[] = $locked->photoPath($field);
+                    $locked->{$field} = $path;
                 }
 
-                $locked->photos = $photos;
                 $locked->save();
                 $this->refreshCompletion($locked);
             });

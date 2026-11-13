@@ -252,7 +252,7 @@ class MatchController extends CandidateController
             }
 
             $query->orderByRaw(
-                "CASE WHEN JSON_LENGTH(profiles.photos) > 0 THEN 1 ELSE 0 END DESC"
+                "CASE WHEN profiles.profile_photo IS NOT NULL AND profiles.profile_photo <> '' THEN 1 ELSE 0 END DESC"
             );
             if ($shuffleSeed !== null) {
                 $query->orderByRaw(
