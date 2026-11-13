@@ -367,8 +367,14 @@ class PaymentController extends Controller
             return $path;
         }
 
-        if (str_starts_with(ltrim($path, '/'), 'uploads/')) {
-            return $request->getSchemeAndHttpHost().'/'.ltrim($path, '/');
+        $path = ltrim($path, '/');
+
+        if (str_starts_with($path, 'uploads/payment_screenshots/')) {
+            return Storage::disk('public')->url(substr($path, strlen('uploads/')));
+        }
+
+        if (str_starts_with($path, 'uploads/')) {
+            return $request->getSchemeAndHttpHost().'/'.$path;
         }
 
         return Storage::disk('public')->url($path);

@@ -40,7 +40,6 @@ class DemoBrideSeeder extends Seeder
                 'verification_status' => 'Completed',
                 'status' => 'active',
                 'profile_completion' => 100,
-                'photos' => null,
                 'updated_at' => now(),
                 'created_at' => now(),
             ],

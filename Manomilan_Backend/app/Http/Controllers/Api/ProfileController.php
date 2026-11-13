@@ -183,21 +183,31 @@ class ProfileController extends Controller
             'nri' => ['nullable', 'boolean'],
             'age_from' => ['nullable', 'integer', 'min:1', 'max:120'],
             'age_to' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'registered_from' => ['nullable', 'date_format:Y-m-d'],
+            'registered_to' => ['nullable', 'date_format:Y-m-d'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
         $q = trim((string) $request->input('q', ''));
         $gender = $request->input('gender');
-        $regType = $request->input('reg_type');
         $verificationStatus = $request->input('verification_status');
         $nri = $request->boolean('nri');
         $ageFrom = $request->filled('age_from') ? (int) $request->input('age_from') : null;
         $ageTo = $request->filled('age_to') ? (int) $request->input('age_to') : null;
+        $registeredFrom = $request->input('registered_from');
+        $registeredTo = $request->input('registered_to');
 
         if ($ageFrom !== null && $ageTo !== null && $ageFrom > $ageTo) {
             return response()->json([
                 'message' => 'Minimum age cannot be greater than maximum age.',
                 'errors' => ['age_from' => ['Minimum age cannot be greater than maximum age.']],
+            ], 422);
+        }
+
+        if ($registeredFrom && $registeredTo && $registeredFrom > $registeredTo) {
+            return response()->json([
+                'message' => 'Start registration date cannot be after end date.',
+                'errors' => ['registered_from' => ['Start registration date cannot be after end date.']],
             ], 422);
         }
 
@@ -210,7 +220,7 @@ class ProfileController extends Controller
 
         $today = Carbon::today();
 
-        $applyFilters = function ($query) use ($q, $gender, $regType, $verificationStatus, $nri, $ageFrom, $ageTo, $today) {
+        $applyFilters = function ($query) use ($q, $gender, $verificationStatus, $nri, $ageFrom, $ageTo, $registeredFrom, $registeredTo, $today) {
             return $query
                 ->when($q !== '', function ($query) use ($q) {
                     $query->where(function ($sub) use ($q) {
@@ -234,17 +244,6 @@ class ProfileController extends Controller
                     });
                 })
                 ->when($gender && $gender !== 'all', fn ($query) => $query->where('profiles.groomorbride', ucfirst(strtolower($gender))))
-                ->when($regType && $regType !== 'all', function ($query) use ($regType) {
-                    if ($regType === 'melava_existing') {
-                        $query->whereHas('profileMelavaRegistrations')
-                            ->where('profiles.reg_id', 'like', 'MM3%');
-                    } elseif ($regType === 'melava') {
-                        $query->whereHas('profileMelavaRegistrations')
-                            ->where('profiles.reg_id', 'like', 'MM3%');
-                    } else {
-                        $query->whereDoesntHave('profileMelavaRegistrations');
-                    }
-                })
                 ->when($verificationStatus === 'verified', function ($query) {
                     $query->where('profiles.verification_status', 'Completed');
                 })
@@ -259,6 +258,8 @@ class ProfileController extends Controller
                     $query->whereNotNull('profiles.birth_date')
                         ->whereDate('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
                 })
+                ->when($registeredFrom, fn ($query) => $query->whereDate('profiles.created_at', '>=', $registeredFrom))
+                ->when($registeredTo, fn ($query) => $query->whereDate('profiles.created_at', '<=', $registeredTo))
                 ->when($nri, fn ($query) => NriProfileScope::apply($query));
         };
 
@@ -387,16 +388,27 @@ class ProfileController extends Controller
             'nri' => ['nullable', 'boolean'],
             'age_from' => ['nullable', 'integer', 'min:1', 'max:120'],
             'age_to' => ['nullable', 'integer', 'min:1', 'max:120'],
+            'registered_from' => ['nullable', 'date_format:Y-m-d'],
+            'registered_to' => ['nullable', 'date_format:Y-m-d'],
         ]);
 
         $q = trim((string) $request->input('q', ''));
         $gender = $request->input('gender');
-        $regType = $request->input('reg_type');
         $verificationStatus = $request->input('verification_status');
         $nri = $request->boolean('nri');
         $ageFrom = $request->filled('age_from') ? (int) $request->input('age_from') : null;
         $ageTo = $request->filled('age_to') ? (int) $request->input('age_to') : null;
+        $registeredFrom = $request->input('registered_from');
+        $registeredTo = $request->input('registered_to');
         $today = Carbon::today();
+
+        if ($registeredFrom && $registeredTo && $registeredFrom > $registeredTo) {
+            return response()->json([
+                'message' => 'Start registration date cannot be after end date.',
+                'errors' => ['registered_from' => ['Start registration date cannot be after end date.']],
+            ], 422);
+        }
+
         $sortBy = $request->input('sort_by', 'registration_date');
         if (! in_array($sortBy, ['registration_number', 'registration_date'], true)) {
             $sortBy = 'registration_date';
@@ -435,14 +447,6 @@ class ProfileController extends Controller
                 });
             })
             ->when($gender && $gender !== 'all', fn ($query) => $query->where('profiles.groomorbride', ucfirst(strtolower($gender))))
-            ->when($regType && $regType !== 'all', function ($query) use ($regType) {
-                if (in_array($regType, ['melava_existing', 'melava'], true)) {
-                    $query->whereHas('profileMelavaRegistrations')
-                        ->where('profiles.reg_id', 'like', 'MM3%');
-                } else {
-                    $query->whereDoesntHave('profileMelavaRegistrations');
-                }
-            })
             ->when($verificationStatus === 'verified', function ($query) {
                 $query->where('profiles.verification_status', 'Completed');
             })
@@ -456,7 +460,9 @@ class ProfileController extends Controller
             ->when($ageTo !== null, function ($query) use ($ageTo, $today) {
                 $query->whereNotNull('profiles.birth_date')
                     ->whereDate('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
-            });
+            })
+            ->when($registeredFrom, fn ($query) => $query->whereDate('profiles.created_at', '>=', $registeredFrom))
+            ->when($registeredTo, fn ($query) => $query->whereDate('profiles.created_at', '<=', $registeredTo));
 
         if ($nri) {
             $query = NriProfileScope::apply($query);
@@ -2330,6 +2336,10 @@ class ProfileController extends Controller
         }
 
         if (str_starts_with($path, 'uploads/profile_photos/')) {
+            $path = substr($path, strlen('uploads/'));
+        }
+
+        if (str_starts_with($path, 'uploads/payment_screenshots/')) {
             $path = substr($path, strlen('uploads/'));
         }
 

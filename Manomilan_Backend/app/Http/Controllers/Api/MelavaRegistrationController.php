@@ -1407,7 +1407,13 @@ class MelavaRegistrationController extends Controller
             return $path;
         }
 
-        return Storage::disk('public')->url(ltrim(preg_replace('#^/?storage/#', '', $path), '/'));
+        $path = ltrim(preg_replace('#^/?storage/#', '', $path), '/');
+
+        if (str_starts_with($path, 'uploads/payment_screenshots/')) {
+            $path = substr($path, strlen('uploads/'));
+        }
+
+        return Storage::disk('public')->url($path);
     }
 
     private function fileUrls(Request $request, array $paths): array
