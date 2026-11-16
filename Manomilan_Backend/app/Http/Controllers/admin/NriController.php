@@ -124,17 +124,11 @@ class NriController extends Controller
                 if ($reg_type === 'melava_existing') {
                     $query->whereIn('profiles.id', \DB::table('profile_melava_registrations')->select('profile_id'))
                         ->whereIn('profiles.registration_type', ['melava', 'existing'])
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } elseif ($reg_type === 'melava') {
                     $query->whereIn('profiles.id', \DB::table('profile_melava_registrations')->select('profile_id'))
                         ->where('profiles.registration_type', 'melava')
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } else {
                     $query->where('profiles.registration_type', $reg_type);
                 }
@@ -221,17 +215,11 @@ class NriController extends Controller
                 if ($reg_type === 'melava_existing') {
                     $query->whereIn('profiles.id', \DB::table('profile_melava_registrations')->select('profile_id'))
                         ->whereIn('profiles.registration_type', ['melava', 'existing'])
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } elseif ($reg_type === 'melava') {
                     $query->whereIn('profiles.id', \DB::table('profile_melava_registrations')->select('profile_id'))
                         ->where('profiles.registration_type', 'melava')
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } else {
                     $query->where('profiles.registration_type', $reg_type);
                 }

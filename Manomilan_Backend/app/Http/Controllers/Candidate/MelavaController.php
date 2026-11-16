@@ -20,34 +20,42 @@ class MelavaController extends CandidateController
                 ->where('profile_id', $profile->id)
                 ->latest()
                 ->get()
-                ->map(fn (ProfileMelavaRegistration $registration) => [
-                    'id' => $registration->id,
-                    'registration_id' => $profile->reg_id ?: 'MM-'.$registration->id,
-                    'receipt_no' => 'REC/'.now()->format('Y').'/'.$registration->id,
-                    'receipt_date' => now()->format('d-m-Y'),
-                    'candidate_name' => $profile->full_name,
-                    'mobile' => $profile->phone ?: $profile->user?->username,
-                    'profile_for' => match (strtolower((string) $profile->groomorbride)) {
-                        'groom' => 'Groom',
-                        'bride' => 'Bride',
-                        default => null,
-                    },
-                    'city' => data_get($profile->addresses, 'current.city')
-                        ?: $profile->employments()->value('employment_city')
-                        ?: $profile->educations()->value('education_city'),
-                    'registered_at' => $registration->created_at?->format(DATE_ATOM),
-                    'event_name' => $registration->campaign?->title ?: 'Melava event',
-                    'event_start_date' => $registration->campaign?->start_date?->format('Y-m-d'),
-                    'event_end_date' => $registration->campaign?->end_date?->format('Y-m-d'),
-                    'venue' => $registration->campaign?->description,
-                    'currency' => $registration->campaign?->currency ?: 'INR',
-                    'amount' => (float) ($registration->campaign?->registration_fee ?? 0)
-                        + ($registration->is_booklet_req ? (float) ($registration->campaign?->booklet_fee ?? 0) : 0),
-                    'payment_status' => $registration->payment_verified ? 'paid' : 'pending',
-                    'payment_submitted' => filled($registration->payment_screenshot)
-                        || ($registration->is_booklet_req && filled($registration->booklet_payment_screenshot)),
-                    'receipt_available' => (bool) $registration->payment_verified,
-                ])
+                ->map(function (ProfileMelavaRegistration $registration) use ($profile) {
+                    $registrationFee = (float) ($registration->campaign?->registration_fee ?? 0);
+                    $bookletRequired = (bool) $registration->is_booklet_req;
+                    $bookletFee = (float) ($registration->campaign?->booklet_fee ?? 0);
+
+                    return [
+                        'id' => $registration->id,
+                        'registration_id' => $profile->reg_id ?: 'MM-'.$registration->id,
+                        'receipt_no' => 'REC/'.now()->format('Y').'/'.$registration->id,
+                        'receipt_date' => now()->format('d-m-Y'),
+                        'candidate_name' => $profile->full_name,
+                        'mobile' => $profile->phone ?: $profile->user?->username,
+                        'profile_for' => match (strtolower((string) $profile->groomorbride)) {
+                            'groom' => 'Groom',
+                            'bride' => 'Bride',
+                            default => null,
+                        },
+                        'city' => data_get($profile->addresses, 'current.city')
+                            ?: $profile->employments()->value('employment_city')
+                            ?: $profile->educations()->value('education_city'),
+                        'registered_at' => $registration->created_at?->format(DATE_ATOM),
+                        'event_name' => $registration->campaign?->title ?: 'Melava event',
+                        'event_start_date' => $registration->campaign?->start_date?->format('Y-m-d'),
+                        'event_end_date' => $registration->campaign?->end_date?->format('Y-m-d'),
+                        'venue' => $registration->campaign?->description,
+                        'currency' => $registration->campaign?->currency ?: 'INR',
+                        'registration_fee' => $registrationFee,
+                        'booklet_required' => $bookletRequired,
+                        'booklet_fee' => $bookletRequired ? $bookletFee : 0,
+                        'amount' => $registrationFee + ($bookletRequired ? $bookletFee : 0),
+                        'payment_status' => $registration->payment_verified ? 'paid' : 'pending',
+                        'payment_submitted' => filled($registration->payment_screenshot)
+                            || ($bookletRequired && filled($registration->booklet_payment_screenshot)),
+                        'receipt_available' => (bool) $registration->payment_verified,
+                    ];
+                })
                 ->values();
 
             return response()->json([

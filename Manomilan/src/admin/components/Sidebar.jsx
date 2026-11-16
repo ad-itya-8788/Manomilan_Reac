@@ -3,6 +3,7 @@ import {
   BadgeCheck,
   CalendarHeart,
   CalendarPlus,
+  Database,
   FileText,
   Globe,
   GraduationCap,
@@ -45,6 +46,7 @@ const ICONS = {
   "/admin/report": FileText,
   "/admin/software-tickets": Ticket,
   "/admin/system-management": Settings,
+  "/admin/database-master": Database,
 };
 
 const ICON_COLORS = {
@@ -64,6 +66,7 @@ const ICON_COLORS = {
   "/admin/report": "#6366f1",
   "/admin/software-tickets": "#0891b2",
   "/admin/system-management": "#0f766e",
+  "/admin/database-master": "#be123c",
 };
 
 export default function Sidebar({ currentPath, onNavigate }) {

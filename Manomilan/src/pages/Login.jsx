@@ -9,6 +9,7 @@ import {
   Users,
   LogIn,
   ArrowRight,
+  Home as HomeIcon,
 } from "lucide-react";
 import {
   loginUser,
@@ -145,7 +146,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const { token, role, user } = isRegistering
+      const { token, role, user, expiresAt } = isRegistering
         ? await registerUser({
             name: values.name.trim(),
             email: values.email.trim(),
@@ -156,7 +157,7 @@ export default function Login() {
           })
         : await loginUser(values.username, values.password);
 
-      saveSession({ token, role, user });
+      saveSession({ token, role, user, expiresAt });
       if (!isRegistering && remember)
         localStorage.setItem("rememberedUser", values.username);
       else localStorage.removeItem("rememberedUser");
@@ -184,6 +185,15 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <header className="login-mobile-header">
+        <a className="login-mobile-brand" href="/" aria-label="Aaryans Mano-Milan home">
+          <img src="/stories/Mano_Milan_Final_Website.png" alt="Aaryans Mano-Milan" />
+        </a>
+        <a className="login-mobile-home" href="/" aria-label="Go to home">
+          <HomeIcon size={22} />
+        </a>
+      </header>
+
       {/* ---------- Left hero panel ---------- */}
       <section className="login-hero">
         <a className="login-logo" href="/">
@@ -423,7 +433,8 @@ export default function Login() {
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
                 />
-                <span>Remember password</span>
+                <span className="login-remember-desktop">Remember username</span>
+                <span className="login-remember-mobile">Remember password</span>
               </label>
               <a href="/forgot-password" className="login-forgot">
                 Forgot password?
@@ -445,6 +456,18 @@ export default function Login() {
             )}
           </button>
 
+          {!isRegistering && (
+            <>
+              <div className="login-mobile-home-separator" aria-hidden="true">
+                <span>or</span>
+              </div>
+              <a className="login-mobile-home-button" href="/">
+                <HomeIcon size={19} />
+                Go to Home
+              </a>
+            </>
+          )}
+
           <p className="login-foot">
             {isRegistering ? "Already have an account?" : "Don't have account?"}
             <a
@@ -462,6 +485,11 @@ export default function Login() {
           </p>
         </form>
       </div>
+
+      <footer className="login-mobile-footer">
+        <span>© {new Date().getFullYear()} Aaryans Mano-Milan</span>
+        <a href="/contactus">Need help? Contact us</a>
+      </footer>
     </div>
   );
 }

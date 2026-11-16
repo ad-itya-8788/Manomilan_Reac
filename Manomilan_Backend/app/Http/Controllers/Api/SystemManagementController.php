@@ -10,6 +10,7 @@ use App\Support\AuditLogger;
 use App\Module;
 use App\Role;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -756,8 +757,8 @@ class SystemManagementController extends Controller
             })
             ->when($filters['action'] ?? null, fn ($query, $action) => $query->where('action', $action))
             ->when($filters['module_id'] ?? null, fn ($query, $id) => $query->where('module_id', $id))
-            ->when($filters['from'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '>=', $date))
-            ->when($filters['to'] ?? null, fn ($query, $date) => $query->whereDate('created_at', '<=', $date));
+            ->when($filters['from'] ?? null, fn ($query, $date) => $query->where('created_at', '>=', Carbon::parse($date)->startOfDay()))
+            ->when($filters['to'] ?? null, fn ($query, $date) => $query->where('created_at', '<', Carbon::parse($date)->addDay()->startOfDay()));
     }
 
     private function protectSystemRole(Role $role): void

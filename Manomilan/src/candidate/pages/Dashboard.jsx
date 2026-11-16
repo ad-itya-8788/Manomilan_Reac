@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight, BadgeCheck, Bell, BriefcaseBusiness, CheckCircle2, ChevronLeft, ChevronRight, Eye, Grid2X2, Heart, MapPin, RefreshCw, Send, Settings2, Shuffle, Sparkles, UserRound, UserRoundPlus, Users, X,
+  AlertTriangle, ArrowRight, BadgeCheck, Bell, BriefcaseBusiness, CheckCircle2, ChevronLeft, ChevronRight, Eye, Grid2X2, Heart, MapPin, RefreshCw, Send, Settings2, Shuffle, Sparkles, UserRound, UserRoundPlus, Users, X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import CandidateLayout from "../components/CandidateLayout";
@@ -15,9 +15,10 @@ import { useToasts } from "../useToasts";
 import { getCachedHomeData } from "../../auth";
 import {
   createRecommendationSeed, getCachedCandidateFeed, getDashboard, getMatch, getMatches,
-  readDashboardCache, refreshRecommendationSeed, saveCandidateFeedCache, sendInterest,
+  getNotifications, markNotificationRead, readDashboardCache, refreshRecommendationSeed,
+  saveCandidateFeedCache, sendInterest,
 } from "../api";
-import { humanGender, text, timeAgo } from "../utils";
+import { dispatchNotificationsChanged, humanGender, text, timeAgo } from "../utils";
 
 const greeting = () => {
   const hour = new Date().getHours();
@@ -239,6 +240,9 @@ export default function Dashboard() {
   const [selected, setSelected] = useState(null);
   const [story, setStory] = useState(null);
   const [showMissingDetails, setShowMissingDetails] = useState(false);
+  const [verificationNotice, setVerificationNotice] = useState(null);
+  const [noticeSaving, setNoticeSaving] = useState(false);
+  const [noticeError, setNoticeError] = useState("");
   const suggestedLoadMoreRef = useRef(null);
   const recentRequestProfile = useRef(null);
   const suggestedRequestProfile = useRef(null);
@@ -272,6 +276,56 @@ export default function Dashboard() {
     }
     return undefined;
   }, [dashboardCache, load]);
+
+  useEffect(() => {
+    let active = true;
+    const checkForVerificationNotice = async () => {
+      try {
+        const result = await getNotifications({
+          type: "document_verification_rejected",
+          filter: "unread",
+          page: 1,
+          per_page: 5,
+        }, { force: true });
+        const latestNotice = result?.notifications?.[0];
+        if (active && latestNotice) {
+          setVerificationNotice((current) => current || latestNotice);
+        }
+      } catch (notificationError) {
+        console.error("Could not check for document verification updates.", notificationError);
+      }
+    };
+
+    checkForVerificationNotice();
+    const interval = window.setInterval(checkForVerificationNotice, 60000);
+    window.addEventListener("focus", checkForVerificationNotice);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", checkForVerificationNotice);
+    };
+  }, []);
+
+  const acknowledgeVerificationNotice = useCallback(async () => {
+    if (!verificationNotice || noticeSaving) return;
+    setNoticeSaving(true);
+    setNoticeError("");
+    try {
+      await markNotificationRead(verificationNotice.id);
+      dispatchNotificationsChanged();
+      setData((current) => current ? {
+        ...current,
+        recent_notifications: (current.recent_notifications || []).map((item) => (
+          item.id === verificationNotice.id ? { ...item, read: true } : item
+        )),
+      } : current);
+      setVerificationNotice(null);
+    } catch (error) {
+      setNoticeError(error.message || "Could not dismiss this update. Please try again.");
+    } finally {
+      setNoticeSaving(false);
+    }
+  }, [noticeSaving, verificationNotice]);
 
   const profile = data?.profile || (!loading ? cached?.profile : null);
   const user = data?.user || (!loading ? cached?.user : null);
@@ -969,6 +1023,70 @@ export default function Dashboard() {
           </div>
         </>
       )}
+
+      {verificationNotice ? (
+        <div className="mm-verification-notice-overlay" role="presentation">
+          <section
+            className="mm-verification-notice"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mm-verification-notice-title"
+            aria-describedby="mm-verification-notice-description"
+          >
+            <button
+              type="button"
+              className="mm-verification-notice-close"
+              onClick={acknowledgeVerificationNotice}
+              disabled={noticeSaving}
+              aria-label="Close document verification update"
+            >
+              <X size={18} />
+            </button>
+            <span className="mm-verification-notice-icon"><AlertTriangle size={25} /></span>
+            <span className="mm-verification-notice-kicker">DOCUMENT REVIEW</span>
+            <h2 id="mm-verification-notice-title">
+              {verificationNotice.title || "Document verification needs attention"}
+            </h2>
+            <p id="mm-verification-notice-description" className="mm-verification-notice-intro">
+              An administrator left the following remark{verificationNotice.data?.documents?.length === 1 ? "" : "s"}:
+            </p>
+            {Array.isArray(verificationNotice.data?.documents) && verificationNotice.data.documents.length ? (
+              <ul className="mm-verification-notice-remarks">
+                {verificationNotice.data.documents.map((document, index) => (
+                  <li key={`${document.key || document.label || "document"}-${index}`}>
+                    <strong>{document.label || "Document"}</strong>
+                    <p>{document.remark}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mm-verification-notice-remarks" role="note">{verificationNotice.message}</p>
+            )}
+            <p className="mm-verification-notice-help">
+              Please review the remark and upload an updated document from your profile.
+            </p>
+            {noticeError ? <p className="mm-verification-notice-error" role="alert">{noticeError}</p> : null}
+            <footer className="mm-verification-notice-actions">
+              <Link
+                to="/candidate/profile?tab=documents"
+                className="mm-verification-notice-link"
+                onClick={acknowledgeVerificationNotice}
+                aria-disabled={noticeSaving}
+              >
+                View my documents
+              </Link>
+              <button
+                type="button"
+                className="mm-verification-notice-button"
+                onClick={acknowledgeVerificationNotice}
+                disabled={noticeSaving}
+              >
+                {noticeSaving ? "Saving…" : "Got it"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
 
       <MatchDetailModal
         open={Boolean(selected)}

@@ -280,11 +280,11 @@ class MatchController extends CandidateController
         }
 
         if (! empty($filters['age_min'])) {
-            $query->whereDate('birth_date', '<=', Carbon::now()->subYears((int) $filters['age_min'])->toDateString());
+            $query->where('birth_date', '<=', Carbon::now()->subYears((int) $filters['age_min'])->toDateString());
         }
 
         if (! empty($filters['age_max'])) {
-            $query->whereDate('birth_date', '>=', Carbon::now()->subYears((int) $filters['age_max'] + 1)->addDay()->toDateString());
+            $query->where('birth_date', '>=', Carbon::now()->subYears((int) $filters['age_max'] + 1)->addDay()->toDateString());
         }
 
         foreach (['religion', 'caste'] as $filter) {

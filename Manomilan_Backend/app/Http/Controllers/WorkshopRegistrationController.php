@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use App\WorkshopRegistration;
 
 class WorkshopRegistrationController extends Controller
@@ -154,11 +155,11 @@ class WorkshopRegistrationController extends Controller
     }
 
     if ($request->filled('from_date')) {
-        $query->whereDate('created_at', '>=', $request->from_date);
+        $query->where('created_at', '>=', Carbon::parse($request->from_date)->startOfDay());
     }
 
     if ($request->filled('to_date')) {
-        $query->whereDate('created_at', '<=', $request->to_date);
+        $query->where('created_at', '<', Carbon::parse($request->to_date)->addDay()->startOfDay());
     }
 
     $registrations = $query

@@ -1,5 +1,10 @@
 <?php
 
+$trustedProxies = trim((string) env('TRUSTED_PROXIES', ''));
+if ($trustedProxies === '' && env('APP_ENV', 'production') === 'local') {
+    $trustedProxies = '127.0.0.1,::1';
+}
+
 return [
 
     /*
@@ -53,6 +58,11 @@ return [
     */
 
     'url' => env('APP_URL', 'http://localhost'),
+
+    'trusted_proxies' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', $trustedProxies)
+    ))),
 
     /*
     |--------------------------------------------------------------------------

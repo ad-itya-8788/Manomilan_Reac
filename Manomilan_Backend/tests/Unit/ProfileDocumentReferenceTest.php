@@ -55,6 +55,30 @@ class ProfileDocumentReferenceTest extends TestCase
         $this->assertFalse($available);
     }
 
+    public function test_profile_photo_delete_matches_storage_url_and_clears_legacy_column(): void
+    {
+        $controller = new ProfileController();
+        $legacyPath = 'uploads/profile_photos/profile.png';
+        $storedPath = $this->invokePrivate($controller, 'normalizePhotoPath', [$legacyPath]);
+        $requestedPath = $this->invokePrivate(
+            $controller,
+            'normalizePhotoPath',
+            ['http://127.0.0.1:8000/storage/profile_photos/profile.png']
+        );
+
+        $profile = new Profile();
+        $profile->setRawAttributes(['profile_photo' => $legacyPath]);
+        $removedPaths = $this->invokePrivate(
+            $controller,
+            'removePhotoColumnReferences',
+            [$profile, ['profile_photo'], [$requestedPath]]
+        );
+
+        $this->assertSame($storedPath, $requestedPath);
+        $this->assertSame([$legacyPath], $removedPaths);
+        $this->assertNull($profile->getAttribute('profile_photo'));
+    }
+
     private function invokePrivate(object $target, string $methodName, array $arguments)
     {
         $method = new ReflectionMethod($target, $methodName);

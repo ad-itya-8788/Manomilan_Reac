@@ -286,8 +286,8 @@ export default function Dashboard({ currentPath = "/admin" }) {
     silentRef.current = false;
 
     const params = period === "custom"
-      ? { force: true, period: "", from: fromDate, to: toDate }
-      : { force: true, period };
+      ? { force: refreshKey > 0, period: "", from: fromDate, to: toDate }
+      : { force: refreshKey > 0, period };
 
     getAdminDashboardOverview(params)
       .then((data) => {

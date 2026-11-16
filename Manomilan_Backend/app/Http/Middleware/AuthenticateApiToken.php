@@ -16,7 +16,8 @@ class AuthenticateApiToken
         $userId = $token ? ApiToken::userId($token) : null;
         $user = $userId ? User::find($userId) : null;
 
-        if (! $user || in_array((string) $user->status, ['inactive', '0'], true)) {
+        $status = strtolower(trim((string) $user?->status));
+        if (! $user || in_array($status, ['inactive', '0'], true)) {
             throw new AuthenticationException();
         }
 

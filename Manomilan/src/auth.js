@@ -3,8 +3,10 @@ import { apiMediaUrl, request } from "./api";
 const ADMIN_ROLES = ["admin", "super"];
 
 const SESSION_KEY = "auth";
+const CANDIDATE_SESSION_KEY = "candidateAuth";
 const IDLE_LIMIT = 15 * 60 * 1000;
 const MAX_AGE = 8 * 60 * 60 * 1000;
+const CANDIDATE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 
 localStorage.removeItem("authToken");
 localStorage.removeItem("authRole");
@@ -28,20 +30,100 @@ const roleForUser = (user) => isCandidateUser(user) ? "candidate" : "admin";
 export const homeForRole = (role) =>
   isAdminRole(role) ? "/admin" : "/candidate";
 
-const read = () => {
+const readStoredSession = (storage, key) => {
   try {
-    return JSON.parse(sessionStorage.getItem(SESSION_KEY));
+    return JSON.parse(storage.getItem(key));
   } catch {
     return null;
   }
 };
 
-export function saveSession({ token, role, user = null }) {
+const newSessionId = () =>
+  `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+const persistentCandidateUser = (user) => ({
+  id: user?.id,
+  profile_id: user?.profile_id ?? null,
+  name: user?.name,
+  username: user?.username,
+  email: user?.email,
+  is_password_changed: user?.is_password_changed,
+  portal: "candidate",
+  role: {
+    name: "candidate",
+    user_type: String(user?.role?.user_type || user?.user_type || "21"),
+  },
+});
+
+const read = () => {
+  const persistent = readStoredSession(localStorage, CANDIDATE_SESSION_KEY);
+  const tab = readStoredSession(sessionStorage, SESSION_KEY);
+
+  if (tab?.role === "admin") return tab;
+
+  if (persistent?.token) {
+    const sameTabSession = tab?.sessionId === persistent.sessionId ? tab : null;
+    return {
+      ...persistent,
+      ...(sameTabSession ? {
+        user: sameTabSession.user || persistent.user,
+        lastActive: sameTabSession.lastActive,
+      } : {}),
+      token: persistent.token,
+      role: "candidate",
+    };
+  }
+
+  if (tab?.role === "candidate" && !tab.token) return null;
+  return tab;
+};
+
+const writeSession = (session) => {
+  const role = session.user ? roleForUser(session.user) : session.role;
+  const normalized = {
+    ...session,
+    role,
+    sessionId: session.sessionId || newSessionId(),
+  };
+
+  if (role === "candidate") {
+    const persistent = {
+      token: normalized.token,
+      role,
+      user: persistentCandidateUser(normalized.user),
+      sessionId: normalized.sessionId,
+      startedAt: normalized.startedAt,
+      lastActive: normalized.lastActive,
+      expiresAt: normalized.expiresAt,
+    };
+    const tabSession = { ...normalized };
+    delete tabSession.token;
+
+    localStorage.setItem(CANDIDATE_SESSION_KEY, JSON.stringify(persistent));
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(tabSession));
+    return;
+  }
+
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(normalized));
+};
+
+export function saveSession({ token, role, user = null, expiresAt = null }) {
   const now = Date.now();
-  sessionStorage.setItem(
-    SESSION_KEY,
-    JSON.stringify({ token, role, user, startedAt: now, lastActive: now }),
-  );
+  const resolvedRole = user ? roleForUser(user) : role;
+  const serverExpiry = Number(expiresAt);
+  const expiryInMilliseconds = serverExpiry > 0
+    ? (serverExpiry < 1e12 ? serverExpiry * 1000 : serverExpiry)
+    : now + (resolvedRole === "candidate" ? CANDIDATE_MAX_AGE : MAX_AGE);
+
+  writeSession({
+    token,
+    role: resolvedRole,
+    user,
+    startedAt: now,
+    lastActive: now,
+    expiresAt: expiryInMilliseconds,
+    sessionId: newSessionId(),
+  });
 }
 
 export function markPasswordChanged() {
@@ -49,7 +131,7 @@ export function markPasswordChanged() {
   if (!session?.user) return;
 
   session.user.is_password_changed = true;
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  writeSession(session);
 }
 
 export function getSession() {
@@ -59,14 +141,24 @@ export function getSession() {
   const resolvedRole = session.user ? roleForUser(session.user) : session.role;
   if (session.role !== resolvedRole) {
     session.role = resolvedRole;
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    writeSession(session);
   }
 
   const now = Date.now();
-  if (
-    now - session.lastActive > IDLE_LIMIT ||
-    now - session.startedAt > MAX_AGE
-  ) {
+  if (resolvedRole === "candidate" && !session.sessionId) {
+    const startedAt = Number(session.startedAt) || now;
+    session.sessionId = newSessionId();
+    session.expiresAt = startedAt + MAX_AGE;
+    writeSession(session);
+  }
+
+  const startedAt = Number(session.startedAt) || now;
+  const lastActive = Number(session.lastActive) || startedAt;
+  const expired = resolvedRole === "candidate"
+    ? now >= (Number(session.expiresAt) || startedAt + MAX_AGE)
+    : now - lastActive > IDLE_LIMIT || now - startedAt > MAX_AGE;
+
+  if (expired) {
     clearSession();
     return null;
   }
@@ -109,19 +201,25 @@ export function updateCachedUserProfile(profile) {
     ...(session.user.profile || {}),
     ...profile,
   };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  writeSession(session);
 }
 
 export function touchSession() {
   const session = read();
   if (!session) return;
   session.lastActive = Date.now();
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  writeSession(session);
 }
 
 export function clearSession() {
   const session = read();
   sessionStorage.removeItem(SESSION_KEY);
+  if (session?.role === "candidate") {
+    const persistent = readStoredSession(localStorage, CANDIDATE_SESSION_KEY);
+    if (!session.sessionId || persistent?.sessionId === session.sessionId) {
+      localStorage.removeItem(CANDIDATE_SESSION_KEY);
+    }
+  }
 
   if (session?.token) {
     request("/logout", {
@@ -134,6 +232,9 @@ export function clearSession() {
 
 export function watchActivity(onExpire) {
   let last = 0;
+  let lastStatusCheck = 0;
+  let statusCheckInFlight = false;
+
   const bump = () => {
     const now = Date.now();
     if (now - last > 30000) {
@@ -142,18 +243,41 @@ export function watchActivity(onExpire) {
     }
   };
 
+  const checkAccountStatus = () => {
+    const now = Date.now();
+    if (statusCheckInFlight || now - lastStatusCheck < 15000) return;
+
+    lastStatusCheck = now;
+    statusCheckInFlight = true;
+    request("/auth/status")
+      .catch((error) => {
+        if (![0, 401, 403].includes(error?.status)) {
+          console.error("Unable to verify the account status.", error);
+        }
+      })
+      .finally(() => {
+        statusCheckInFlight = false;
+      });
+  };
+
   const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
   events.forEach((event) =>
     window.addEventListener(event, bump, { passive: true }),
   );
 
+  checkAccountStatus();
+  window.addEventListener("focus", checkAccountStatus);
+
   const timer = setInterval(() => {
     if (!getSession()) onExpire();
   }, 15000);
+  const statusTimer = setInterval(checkAccountStatus, 30000);
 
   return () => {
     events.forEach((event) => window.removeEventListener(event, bump));
+    window.removeEventListener("focus", checkAccountStatus);
     clearInterval(timer);
+    clearInterval(statusTimer);
   };
 }
 
@@ -173,6 +297,7 @@ export async function loginUser(username, password) {
       token: body.token,
       role: roleForUser(body.user),
       user: body.user,
+      expiresAt: body.expires_at,
     };
   } catch (error) {
     if (error.status === 401) {
@@ -203,6 +328,7 @@ export async function registerUser({ name, email, phone, password, birth_date, g
     token: body.token,
     role: roleForUser(body.user),
     user: body.user,
+    expiresAt: body.expires_at,
   };
 }
 
@@ -228,8 +354,9 @@ export function clearDashboardCache() {
 
 async function loadDashboard(endpoint, {
   force = false, period = "", from = "", to = "", gender = "", status = "", source = "",
+  useSessionCache = true,
 } = {}) {
-  if (!force) {
+  if (!force && useSessionCache) {
     const cached = readDashboardCache();
     if (cached) return cached;
   }
@@ -243,14 +370,19 @@ async function loadDashboard(endpoint, {
   if (source) query.set("source", source);
   const queryString = query.toString();
 
-  dashboardRequest = request(`${endpoint}${queryString ? `?${queryString}` : ""}`).then((body) => {
+  dashboardRequest = request(
+    `${endpoint}${queryString ? `?${queryString}` : ""}`,
+    { cacheBypass: force },
+  ).then((body) => {
       if (!body?.success || !body?.data) {
         throw new Error(body?.message || "Could not load dashboard data.");
       }
-      sessionStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
-        savedAt: Date.now(),
-        data: body.data,
-      }));
+      if (useSessionCache) {
+        sessionStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
+          savedAt: Date.now(),
+          data: body.data,
+        }));
+      }
       return body.data;
     }).finally(() => {
       dashboardRequest = null;
@@ -260,8 +392,10 @@ async function loadDashboard(endpoint, {
 }
 
 export const getDashboard = (options = {}) => loadDashboard("/dashboard", options);
-export const getAdminDashboard = (options = {}) => loadDashboard("/reports", options);
-export const getAdminDashboardOverview = (options = {}) => loadDashboard("/dashboard", options);
+export const getAdminDashboard = (options = {}) =>
+  loadDashboard("/reports", { ...options, useSessionCache: false });
+export const getAdminDashboardOverview = (options = {}) =>
+  loadDashboard("/dashboard", { ...options, useSessionCache: false });
 
 export async function getHomeData() {
   const body = await request("/home-data");

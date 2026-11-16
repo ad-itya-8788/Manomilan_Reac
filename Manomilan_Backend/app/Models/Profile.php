@@ -59,45 +59,34 @@ class Profile extends Model
             }
         });
 
-        static::creating(function (self $profile): void {
-            if (Schema::hasColumn($profile->getTable(), 'reg_id')) {
-                if (! $profile->reg_id) {
-                    $prefix = 'MM3-';
-                    $lastId = self::query()
-                        ->where('reg_id', 'like', $prefix.'%')
-                        ->orderByDesc('id')
-                        ->value('reg_id');
-                    $nextNumber = $lastId && preg_match('/^MM3-(\d+)$/', $lastId, $matches)
-                        ? (int) $matches[1] + 1
-                        : 1;
-                    $profile->reg_id = $prefix.str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
-                }
+        static::created(function (self $profile): void {
+            $table = $profile->getTable();
+            $column = Schema::hasColumn($table, 'reg_id')
+                ? 'reg_id'
+                : (Schema::hasColumn($table, 'registration_number') ? 'registration_number' : null);
 
+            if ($column === null || filled($profile->getAttribute($column))) {
                 return;
             }
 
-            if (! Schema::hasColumn($profile->getTable(), 'registration_number')) {
-                return;
-            }
-
-            $type = $profile->registration_type ?: session('registration_type', 'quick');
-            $prefix = $type === 'melava' ? 'MM3-' : 'AMM2026';
-            $lastProfile = self::query()
-                ->where('registration_number', 'like', $prefix.'%')
-                ->orderByDesc('id')
-                ->first();
-            $nextNumber = 1;
+            $registrationNumber = config('candidate.registration_prefix', 'AMM-')
+                .str_pad((string) $profile->getKey(), 4, '0', STR_PAD_LEFT);
+            $updates = [$column => $registrationNumber];
 
             if (
-                $lastProfile &&
-                preg_match('/^'.preg_quote($prefix, '/').'(?:B|G)?(\d+)$/', (string) $lastProfile->registration_number, $matches)
+                $column === 'registration_number'
+                && Schema::hasColumn($table, 'profile_id')
+                && ! filled($profile->profile_id)
             ) {
-                $nextNumber = (int) $matches[1] + 1;
+                $updates['profile_id'] = $registrationNumber;
             }
 
-            $profile->registration_number = $prefix.str_pad((string) $nextNumber, 4, '0', STR_PAD_LEFT);
-            if (Schema::hasColumn($profile->getTable(), 'profile_id')) {
-                $profile->profile_id = $profile->registration_number;
+            $profile->getConnection()->table($table)
+                ->where($profile->getKeyName(), $profile->getKey())
+                ->update($updates);
+
+            foreach ($updates as $attribute => $value) {
+                $profile->setAttribute($attribute, $value);
             }
         });
 
@@ -188,10 +177,14 @@ class Profile extends Model
     public function isMelava3Candidate()
     {
         $registrationId = $this->reg_id ?: $this->profile_id;
+        $hasLegacyMelavaId = is_string($registrationId)
+            && str_starts_with($registrationId, 'MM3-');
 
-        return is_string($registrationId)
-            && str_starts_with($registrationId, 'MM3-')
-            && $this->melava_batch === 'october_2026';
+        return $this->melava_batch === 'october_2026'
+            && (
+                in_array($this->registration_type, ['melava', 'existing'], true)
+                || $hasLegacyMelavaId
+            );
     }
 
     /**

@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -158,7 +159,6 @@ abstract class CandidateController extends Controller
             'casteCertificate' => $docsModel?->caste_certificate,
             'medicalFitnessCertificate' => $docsModel?->medical_fitness_certificate,
         ];
-
         $documents = [];
         foreach (self::DOCUMENT_KEYS as $key) {
             $documents[$key] = [
@@ -576,6 +576,11 @@ abstract class CandidateController extends Controller
         }
 
         $path = ltrim($path, '/');
+
+        if (str_starts_with($path, 'profile_documents/')
+            || str_starts_with($path, 'profile_photos/')) {
+            return Storage::disk('public')->url($path);
+        }
 
         if (str_starts_with($path, 'storage/')) {
             $path = substr($path, strlen('storage/'));

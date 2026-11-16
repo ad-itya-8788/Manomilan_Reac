@@ -3,6 +3,15 @@ import { Copy } from "lucide-react";
 import { apiMediaUrl, request } from "../api";
 import { getSession, isAdminRole } from "../auth";
 import { SUBCASTES } from "../data/casteOptions";
+import {
+  clearMelavaDraft,
+  cleanupExpiredMelavaDrafts,
+  loadMelavaDraftAttachment,
+  melavaDraftKey,
+  readMelavaDraft,
+  saveMelavaDraft,
+  saveMelavaDraftAttachment,
+} from "./melavaRegistrationDraft";
 import "./MelavaRegistration.css";
 
 // NOTE: the PDF download uses jsPDF. Install once:  npm i jspdf
@@ -108,6 +117,7 @@ const F = (name, label, type, width, required, extra = {}) => ({
 const S = (id, fn) => ({ s: [id, fn] });
 const DOC_ACCEPT = ".pdf,.jpg,.jpeg,.png";
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const ACTIVE_LOOKUP_SESSION_KEY = "melava_registration_active_lookup";
 
 const EDUCATION_LEVEL_OPTIONS = ["10th", "12th", "UG", "PG", "PhD", "Diploma"];
 
@@ -350,6 +360,50 @@ const cleanMobile = (value) => {
   if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
   if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
   return digits.slice(0, 10);
+};
+
+const createDraftFileId = () => (
+  globalThis.crypto?.randomUUID?.()
+  || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+);
+
+const serializeDraftItem = (item) => {
+  if (!item) return null;
+  return {
+    draftFileId: item.draftFileId || null,
+    fileName: item.file?.name || item.fileName || "",
+    fileType: item.file?.type || item.fileType || "",
+    fileSize: item.file?.size ?? item.fileSize ?? 0,
+    lastModified: item.file?.lastModified ?? item.lastModified ?? 0,
+    preview: item.file
+      ? null
+      : (typeof item.preview === "string" && !item.preview.startsWith("blob:") ? item.preview : null),
+    path: item.path || null,
+    existing: Boolean(item.existing),
+  };
+};
+
+const serializeDraftGroup = (group) => Object.fromEntries(
+  Object.entries(group).map(([key, value]) => [
+    key,
+    Array.isArray(value) ? value.map(serializeDraftItem) : serializeDraftItem(value),
+  ]),
+);
+
+const backendVersionFrom = (response) => {
+  const values = [
+    response?.updated_at,
+    response?.profile_updated_at,
+    response?.edit_form?.profile?.updated_at,
+    response?.backend_updated_at,
+    response?.pending_registration?.updated_at,
+    response?.registration?.updated_at,
+    response?.data?.updated_at,
+    response?.data?.profile_updated_at,
+    response?.data?.edit_form?.profile?.updated_at,
+  ];
+  const timestamps = values.map((value) => Date.parse(value || "")).filter(Number.isFinite);
+  return timestamps.length ? Math.max(...timestamps) : null;
 };
 
 const digitsOnly = (value, max = 15) => String(value || "").replace(/\D/g, "").slice(0, max);
@@ -979,9 +1033,20 @@ export default function MelavaRegistration() {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [adminEditLoading, setAdminEditLoading] = useState(Boolean(adminEditId));
   const [adminEditLoadError, setAdminEditLoadError] = useState("");
+  const [draftStatus, setDraftStatus] = useState("");
+  const [draftConflict, setDraftConflict] = useState(null);
+  const [draftRestoring, setDraftRestoring] = useState(false);
+  const [draftHydratedKey, setDraftHydratedKey] = useState(null);
   const objectUrls = useRef([]);
   const lookupSequence = useRef(0);
   const postalAutofill = useRef({});
+  const backendUpdatedAtRef = useRef(null);
+  const draftDirtyRef = useRef(false);
+  const draftRevisionRef = useRef(0);
+  const saveCurrentDraftRef = useRef(null);
+  const findCandidateRef = useRef(null);
+  const autoLookupCampaignRef = useRef(null);
+  const expiredDraftKeysRef = useRef(new Set());
   const [postalLookup, setPostalLookup] = useState({
     current: { loading: false, message: "" },
     permanent: { loading: false, message: "" },
@@ -992,12 +1057,267 @@ export default function MelavaRegistration() {
   const currentAddressPin = form.current_address_pincode;
   const total = Number(settings.fee) + (form.booklet_required ? Number(settings.booklet_fee) : 0);
   const selectedCampaign = campaigns.find((item) => String(item.id) === selectedCampaignId);
+  const currentDraftKey = melavaDraftKey({
+    adminEditId,
+    campaignId: selectedCampaignId,
+    mobile: form.username,
+  });
+  const draftRecordNumber = adminEditId || cleanMobile(form.username);
+  const draftStatusMessage = {
+    saving: "Saving draft…",
+    saved: "Draft saved on this browser. It expires one hour after the latest edit.",
+    restored: "Your local draft was restored.",
+    "files-missing": "Draft restored, but an uploaded file is unavailable. Please upload it again.",
+    expired: "The previous local draft expired and was removed.",
+    invalid: "An unreadable local draft was removed.",
+    error: "Unable to save this draft in browser storage.",
+    "clear-error": "Unable to clear the local draft from this browser; it may appear again.",
+    mismatch: "A draft for a different registration was left untouched.",
+    conflict: "Local edits and backend data both changed. Choose which version to continue with.",
+    backend: "The latest backend data was selected.",
+  }[draftStatus] || "";
+  const markDraftDirty = () => {
+    draftDirtyRef.current = true;
+    draftRevisionRef.current += 1;
+  };
 
-  const makeObjectUrl = (file) => {
+  const makeObjectUrl = useCallback((file) => {
     const url = URL.createObjectURL(file);
     objectUrls.current.push(url);
     return url;
+  }, []);
+
+  const saveCurrentDraft = useCallback(() => {
+    if (
+      !currentDraftKey
+      || draftHydratedKey !== currentDraftKey
+      || draftConflict
+      || stage === "success"
+    ) return null;
+
+    const saved = saveMelavaDraft(currentDraftKey, {
+      recordNumber: draftRecordNumber,
+      campaignId: selectedCampaignId,
+      form,
+      educations,
+      employments,
+      files: serializeDraftGroup(files),
+      documents: serializeDraftGroup(documents),
+      paymentFile: serializeDraftItem(paymentFile),
+      removedFiles,
+      step,
+      backendUpdatedAt: backendUpdatedAtRef.current,
+      hasUnsavedChanges: draftDirtyRef.current,
+    });
+
+    if (!saved.ok) {
+      setDraftStatus("error");
+      return null;
+    }
+
+    setDraftStatus("saved");
+    return saved.draft.updatedAt;
+  }, [
+    currentDraftKey,
+    draftHydratedKey,
+    draftConflict,
+    stage,
+    draftRecordNumber,
+    selectedCampaignId,
+    form,
+    educations,
+    employments,
+    files,
+    documents,
+    paymentFile,
+    removedFiles,
+    step,
+  ]);
+  saveCurrentDraftRef.current = saveCurrentDraft;
+
+  const persistDraftAttachments = useCallback((items) => {
+    if (!currentDraftKey) return;
+    items.filter((item) => item?.file && item.draftFileId).forEach((item) => {
+      saveMelavaDraftAttachment(currentDraftKey, item.draftFileId, item.file)
+        .catch(() => setDraftStatus("error"));
+    });
+  }, [currentDraftKey]);
+
+  const restoreDraft = useCallback(async (key, draft, backendUpdatedAt = null) => {
+    setDraftRestoring(true);
+    try {
+      let missingAttachments = false;
+      const restoreItem = async (item) => {
+        if (!item) return null;
+        if (!item.draftFileId) return item;
+        try {
+          const storedFile = await loadMelavaDraftAttachment(key, item.draftFileId);
+          if (!storedFile) {
+            missingAttachments = true;
+            return null;
+          }
+          const file = storedFile instanceof File
+            ? storedFile
+            : new File([storedFile], item.fileName || "uploaded-file", {
+              type: item.fileType || storedFile.type || "",
+              lastModified: item.lastModified || Date.now(),
+            });
+          return { ...item, file, preview: makeObjectUrl(file) };
+        } catch {
+          missingAttachments = true;
+          return null;
+        }
+      };
+      const restoreGroup = async (group, defaults) => {
+        const restored = { ...defaults };
+        await Promise.all(Object.entries(draft[group] || {}).map(async ([name, value]) => {
+          restored[name] = Array.isArray(value)
+            ? (await Promise.all(value.map(restoreItem))).filter(Boolean)
+            : await restoreItem(value);
+        }));
+        return restored;
+      };
+
+      const restoredFiles = await restoreGroup("files", EMPTY_FILES);
+      const restoredDocuments = await restoreGroup("documents", EMPTY_DOCUMENTS);
+      const restoredPaymentFile = await restoreItem(draft.paymentFile);
+
+      setForm({ ...INITIAL_FORM, ...draft.form });
+      setEducations(Array.isArray(draft.educations) && draft.educations.length
+        ? draft.educations
+        : [{ ...EMPTY_EDUCATION }]);
+      setEmployments(Array.isArray(draft.employments) && draft.employments.length
+        ? draft.employments
+        : [{ ...EMPTY_EMPLOYMENT }]);
+      setFiles(restoredFiles);
+      setDocuments(restoredDocuments);
+      setPaymentFile(restoredPaymentFile);
+      setRemovedFiles(Array.isArray(draft.removedFiles) ? draft.removedFiles : []);
+      setStep(Number.isInteger(draft.step) ? Math.min(Math.max(draft.step, 0), PREVIEW_STEP) : 0);
+      if (!adminEditId && draft.campaignId) {
+        const campaign = campaigns.find((item) => String(item.id) === String(draft.campaignId));
+        if (campaign) {
+          setSelectedCampaignId(String(campaign.id));
+          setSettings(settingsFromCampaign(campaign));
+        }
+      }
+      backendUpdatedAtRef.current = backendUpdatedAt ?? draft.backendUpdatedAt ?? null;
+      draftDirtyRef.current = Boolean(draft.hasUnsavedChanges);
+      setDraftHydratedKey(key);
+      setDraftStatus(missingAttachments ? "files-missing" : "restored");
+      setStage("form");
+    } finally {
+      setDraftRestoring(false);
+    }
+  }, [adminEditId, campaigns, makeObjectUrl]);
+
+  const reconcileDraft = useCallback(async (key, readResult, response, backendHasRecord, recordNumber) => {
+    const backendUpdatedAt = backendVersionFrom(response);
+    backendUpdatedAtRef.current = backendUpdatedAt;
+    const draft = readResult?.draft;
+    if (readResult?.status === "available" && String(draft?.recordNumber) !== String(recordNumber)) {
+      setDraftStatus("mismatch");
+      setDraftHydratedKey(null);
+      return;
+    }
+    if (readResult?.status === "available" && draft?.recordNumber === recordNumber) {
+      if (!backendHasRecord || !draft.hasUnsavedChanges) {
+        if (!backendHasRecord) {
+          await restoreDraft(key, draft, backendUpdatedAt);
+          return;
+        }
+      } else if (
+        draft.backendUpdatedAt !== null
+        && draft.backendUpdatedAt !== undefined
+        && backendUpdatedAt !== null
+        && Number(draft.backendUpdatedAt) === backendUpdatedAt
+      ) {
+        await restoreDraft(key, draft, backendUpdatedAt);
+        return;
+      } else if (draft.hasUnsavedChanges) {
+        setDraftConflict({ key, draft, backendUpdatedAt });
+        setDraftHydratedKey(null);
+        setDraftStatus("conflict");
+        return;
+      }
+    } else if (readResult?.status === "expired" || expiredDraftKeysRef.current.has(key)) {
+      setDraftStatus("expired");
+    } else if (readResult?.status === "invalid") {
+      setDraftStatus("invalid");
+    } else if (readResult?.status === "unavailable") {
+      setDraftStatus("error");
+    } else if (readResult?.status === "missing") {
+      setDraftStatus("");
+    }
+
+    draftDirtyRef.current = false;
+    setDraftHydratedKey(key);
+  }, [restoreDraft]);
+
+  const resolveDraftConflict = async (useLocalDraft) => {
+    if (!draftConflict) return;
+    const { key, draft, backendUpdatedAt } = draftConflict;
+    if (useLocalDraft) {
+      const latest = readMelavaDraft(key);
+      if (latest.status !== "available") {
+        setDraftStatus(latest.status === "expired" ? "expired" : "error");
+        return;
+      }
+      if (latest.draft.updatedAt !== draft.updatedAt) {
+        setDraftConflict({ key, draft: latest.draft, backendUpdatedAt });
+        setDraftStatus("conflict");
+        return;
+      }
+      await restoreDraft(key, latest.draft, backendUpdatedAt);
+    } else {
+      if (!clearMelavaDraft(key, draft.updatedAt)) {
+        setDraftStatus("error");
+        return;
+      }
+      backendUpdatedAtRef.current = backendUpdatedAt;
+      draftDirtyRef.current = false;
+      setDraftHydratedKey(key);
+      setDraftStatus("backend");
+    }
+    setDraftConflict(null);
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const cleanup = cleanupExpiredMelavaDrafts();
+      expiredDraftKeysRef.current = cleanup.expiredKeys;
+      if (cleanup.error) setDraftStatus("error");
+      else if (cleanup.invalidKeys.size) setDraftStatus("invalid");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !currentDraftKey
+      || draftHydratedKey !== currentDraftKey
+      || draftConflict
+      || stage === "success"
+    ) return undefined;
+    const timer = window.setTimeout(() => {
+      setDraftStatus("saving");
+      saveCurrentDraft();
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [currentDraftKey, draftHydratedKey, draftConflict, stage, saveCurrentDraft]);
+
+  useEffect(() => {
+    const flushDraft = () => saveCurrentDraft();
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flushDraft();
+    };
+    window.addEventListener("pagehide", flushDraft);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushDraft);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [saveCurrentDraft]);
 
   useEffect(() => {
     let alive = true;
@@ -1206,6 +1526,7 @@ export default function MelavaRegistration() {
   };
 
   const update = (name, value) => {
+    markDraftDirty();
     if (
       (name.startsWith("current_address_") || name.startsWith("permanent_address_"))
       && postalAutofill.current[name]
@@ -1368,7 +1689,7 @@ export default function MelavaRegistration() {
 
     let alive = true;
     request(`/melava-registrations/${adminEditId}`)
-      .then((response) => {
+      .then(async (response) => {
         if (!alive) return;
         const registration = response?.data;
         if (!registration) throw new Error("The Melava registration could not be found.");
@@ -1448,6 +1769,9 @@ export default function MelavaRegistration() {
           message: "Editing this candidate's Melava registration. Saving changes will not modify payment verification.",
           tone: "ok",
         });
+        const key = melavaDraftKey({ adminEditId });
+        const savedDraft = readMelavaDraft(key);
+        await reconcileDraft(key, savedDraft, registration, true, adminEditId);
       })
       .catch((error) => {
         if (alive) setAdminEditLoadError(error.message || "Unable to load this Melava registration.");
@@ -1459,10 +1783,10 @@ export default function MelavaRegistration() {
     return () => {
       alive = false;
     };
-  }, [adminEditId, adminEditAccessError, hydrate]);
+  }, [adminEditId, adminEditAccessError, hydrate, reconcileDraft]);
 
-  const findCandidate = async () => {
-    const mobile = cleanMobile(form.username);
+  const findCandidate = async (mobileValue = form.username) => {
+    const mobile = cleanMobile(mobileValue);
 
     if (!/^[6-9]\d{9}$/.test(mobile)) {
       setErrors((previous) => ({ ...previous, username: "Enter a valid 10-digit mobile number." }));
@@ -1470,7 +1794,25 @@ export default function MelavaRegistration() {
       return;
     }
 
+    try {
+      window.sessionStorage.setItem(ACTIVE_LOOKUP_SESSION_KEY, JSON.stringify({
+        campaignId: selectedCampaignId,
+        mobile,
+      }));
+    } catch {
+      setDraftStatus("error");
+    }
+
     const sequence = ++lookupSequence.current;
+    const key = melavaDraftKey({ campaignId: selectedCampaignId, mobile });
+    const savedDraft = readMelavaDraft(key);
+    if (savedDraft.status === "expired" || expiredDraftKeysRef.current.has(key)) {
+      setDraftStatus("expired");
+    } else if (savedDraft.status === "invalid") {
+      setDraftStatus("invalid");
+    } else if (savedDraft.status === "unavailable") {
+      setDraftStatus("error");
+    }
     setLookup({ status: "loading", message: "Checking your registration...", tone: "" });
     setErrors((previous) => removeFieldError(previous, "username"));
 
@@ -1600,8 +1942,18 @@ export default function MelavaRegistration() {
           tone: "ok",
         });
       }
+      await reconcileDraft(
+        key,
+        savedDraft,
+        data,
+        data.type === "website_user" || data.type === "pending_registration",
+        mobile,
+      );
     } catch (error) {
       if (sequence !== lookupSequence.current) return;
+      if (savedDraft.status === "available" && savedDraft.draft?.recordNumber === mobile) {
+        await restoreDraft(key, savedDraft.draft);
+      }
       setLookup({
         status: "error",
         message: error.message || "Unable to fetch registration details.",
@@ -1609,6 +1961,26 @@ export default function MelavaRegistration() {
       });
     }
   };
+  findCandidateRef.current = findCandidate;
+
+  useEffect(() => {
+    if (campaignsLoading || !selectedCampaignId || adminEditId) return;
+    if (autoLookupCampaignRef.current === selectedCampaignId) return;
+    autoLookupCampaignRef.current = selectedCampaignId;
+
+    try {
+      const activeLookup = JSON.parse(window.sessionStorage.getItem(ACTIVE_LOOKUP_SESSION_KEY) || "null");
+      const mobile = cleanMobile(activeLookup?.mobile);
+      if (
+        String(activeLookup?.campaignId) !== String(selectedCampaignId)
+        || !/^[6-9]\d{9}$/.test(mobile)
+      ) return;
+      setForm((previous) => ({ ...previous, username: mobile }));
+      void findCandidateRef.current?.(mobile);
+    } catch {
+      setDraftStatus("error");
+    }
+  }, [adminEditId, campaignsLoading, selectedCampaignId]);
 
   const handleFileChange = (field, event) => {
     const selected = Array.from(event.target.files || []);
@@ -1626,27 +1998,41 @@ export default function MelavaRegistration() {
     }
 
     const bucket = fileBucket(field);
+    markDraftDirty();
+    const makeFileItem = (file) => ({
+      file,
+      draftFileId: createDraftFileId(),
+      preview: makeObjectUrl(file),
+    });
 
     if (bucket === "profilePhoto") {
-      setFiles((previous) => ({ ...previous, profilePhoto: { file: selected[0], preview: makeObjectUrl(selected[0]) } }));
+      const item = makeFileItem(selected[0]);
+      persistDraftAttachments([item]);
+      setFiles((previous) => ({ ...previous, profilePhoto: item }));
     } else if (["full_body_photo", "half_body_photo", "selfie_photo"].includes(bucket)) {
-      setFiles((previous) => ({ ...previous, [bucket]: { file: selected[0], preview: makeObjectUrl(selected[0]) } }));
+      const item = makeFileItem(selected[0]);
+      persistDraftAttachments([item]);
+      setFiles((previous) => ({ ...previous, [bucket]: item }));
     } else if (bucket === "additionalPhotos" || bucket === "candidatePhotos") {
       const max = bucket === "candidatePhotos" ? 5 : 4;
       if ((files[bucket] || []).length + selected.length > max) {
         setErrors((previous) => ({ ...previous, [field.n]: `You can add up to ${max} photos only.` }));
         return;
       }
-      const items = selected.map((file) => ({ file, preview: makeObjectUrl(file) }));
+      const items = selected.map(makeFileItem);
+      persistDraftAttachments(items);
       setFiles((previous) => ({ ...previous, [bucket]: [...(previous[bucket] || []), ...items] }));
     } else {
-      setDocuments((previous) => ({ ...previous, [bucket]: { file: selected[0], preview: makeObjectUrl(selected[0]) } }));
+      const item = makeFileItem(selected[0]);
+      persistDraftAttachments([item]);
+      setDocuments((previous) => ({ ...previous, [bucket]: item }));
     }
 
     setErrors((previous) => removeFieldError(previous, field.n));
   };
 
   const removeFile = (field) => {
+    markDraftDirty();
     const bucket = fileBucket(field);
     const items = fileItems(field);
     const removalKey = {
@@ -1949,6 +2335,9 @@ export default function MelavaRegistration() {
         body: buildPendingPayload(),
         auth: false,
       });
+      backendUpdatedAtRef.current = Date.parse(response.updated_at || "") || null;
+      draftDirtyRef.current = false;
+      saveCurrentDraft();
       setMeta((previous) => ({ ...previous, pending_registration_token: response.token || "" }));
       setStage("payment");
       scrollTop();
@@ -2003,8 +2392,24 @@ export default function MelavaRegistration() {
     return payload;
   };
 
+  const clearActiveLookupHint = () => {
+    try {
+      const activeLookup = JSON.parse(window.sessionStorage.getItem(ACTIVE_LOOKUP_SESSION_KEY) || "null");
+      if (
+        String(activeLookup?.campaignId) === String(selectedCampaignId)
+        && cleanMobile(activeLookup?.mobile) === cleanMobile(form.username)
+      ) {
+        window.sessionStorage.removeItem(ACTIVE_LOOKUP_SESSION_KEY);
+      }
+    } catch {
+      setDraftStatus("error");
+    }
+  };
+
   const saveAdminEdit = async () => {
     if (!adminEditId || !validateAll(false)) return;
+    const submittedRevision = draftRevisionRef.current;
+    const submittedDraftAt = saveCurrentDraft();
     setSubmitError("");
     setSubmitting(true);
 
@@ -2016,6 +2421,18 @@ export default function MelavaRegistration() {
         method: "POST",
         body: payload,
       });
+      let nextDraftStatus = "";
+      if (submittedRevision !== draftRevisionRef.current) {
+        nextDraftStatus = saveCurrentDraftRef.current?.() ? "saved" : "error";
+      } else if (
+        submittedDraftAt === null
+        || !clearMelavaDraft(currentDraftKey, submittedDraftAt)
+      ) {
+        nextDraftStatus = "clear-error";
+      }
+      clearActiveLookupHint();
+      setDraftHydratedKey(null);
+      setDraftStatus(nextDraftStatus);
       setResult(response);
       setStage("success");
       scrollTop();
@@ -2053,6 +2470,8 @@ export default function MelavaRegistration() {
       return;
     }
 
+    const submittedRevision = draftRevisionRef.current;
+    const submittedDraftAt = saveCurrentDraft();
     setSubmitting(true);
     try {
       const pendingPayload = buildPendingPayload();
@@ -2063,6 +2482,18 @@ export default function MelavaRegistration() {
         auth: false,
       });
       const response = await request("/melava-registrations", { method: "POST", body: buildPayload(), auth: false });
+      let nextDraftStatus = "";
+      if (submittedRevision !== draftRevisionRef.current) {
+        nextDraftStatus = saveCurrentDraftRef.current?.() ? "saved" : "error";
+      } else if (
+        submittedDraftAt === null
+        || !clearMelavaDraft(currentDraftKey, submittedDraftAt)
+      ) {
+        nextDraftStatus = "clear-error";
+      }
+      clearActiveLookupHint();
+      setDraftHydratedKey(null);
+      setDraftStatus(nextDraftStatus);
 
       // Automatically download the PDF of everything the user filled in.
       // A PDF problem must never block a successful registration.
@@ -2113,11 +2544,30 @@ export default function MelavaRegistration() {
       setPaymentError("Choose an image or PDF payment screenshot.");
       return;
     }
-    setPaymentFile({ file, preview: makeObjectUrl(file) });
+    markDraftDirty();
+    const item = { file, draftFileId: createDraftFileId(), preview: makeObjectUrl(file) };
+    persistDraftAttachments([item]);
+    setPaymentFile(item);
     setPaymentError("");
   };
 
+  const removePaymentFile = () => {
+    markDraftDirty();
+    setPaymentFile(null);
+  };
+
   const resetAll = () => {
+    const cleared = clearMelavaDraft(currentDraftKey);
+    setDraftStatus(currentDraftKey && !cleared ? "clear-error" : "");
+    try {
+      window.sessionStorage.removeItem(ACTIVE_LOOKUP_SESSION_KEY);
+    } catch {
+      setDraftStatus("error");
+    }
+    setDraftHydratedKey(null);
+    setDraftConflict(null);
+    draftDirtyRef.current = false;
+    draftRevisionRef.current = 0;
     lookupSequence.current += 1;
     objectUrls.current.forEach((url) => URL.revokeObjectURL(url));
     objectUrls.current = [];
@@ -2460,6 +2910,7 @@ export default function MelavaRegistration() {
                 {pdfError || `${ICONS.pdf} Your filled form is ready to download as a PDF.`}
               </div>
             ) : null}
+            {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{draftStatusMessage}</p> : null}
             {result.credentials ? (
               <div className="al ok">
                 <b>Your login is ready.</b>
@@ -2497,6 +2948,7 @@ export default function MelavaRegistration() {
               <span className="must">{settings.batch_label}</span>
             </div>
           </div>
+          {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{draftStatusMessage}</p> : null}
 
           <section className="card pay-card">
             <h2>Payment Details</h2>
@@ -2533,7 +2985,7 @@ export default function MelavaRegistration() {
               {paymentFile ? (
                 <div className="ph">
                   {paymentFile.file.type.startsWith("image/") ? <img src={paymentFile.preview} alt="" /> : <span className="doc-name">{paymentFile.file.name}</span>}
-                  <button type="button" className="mini" onClick={() => setPaymentFile(null)}>Remove</button>
+                  <button type="button" className="mini" onClick={removePaymentFile}>Remove</button>
                 </div>
               ) : null}
               {paymentError ? <div className="al er">{paymentError}</div> : null}
@@ -2556,7 +3008,9 @@ export default function MelavaRegistration() {
   }
 
   // The form stays hidden until the mobile number has been searched.
-  const locked = step === 0 && !adminEditId && !["existing", "new"].includes(lookup.status);
+  const locked = draftRestoring
+    || (step === 0 && !adminEditId && !["existing", "new"].includes(lookup.status))
+    || Boolean(draftConflict);
 
   return (
     <main className="melava-page">
@@ -2570,6 +3024,7 @@ export default function MelavaRegistration() {
           </div>
           {!adminEditId && settings.qr_image_url ? <img className="hero-qr" src={apiMediaUrl(settings.qr_image_url)} alt="Melava payment QR" /> : null}
         </div>
+        {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{draftStatusMessage}</p> : null}
 
         <section className="card campaign-card">
           <div className="campaign-art">
@@ -2642,7 +3097,14 @@ export default function MelavaRegistration() {
                 placeholder="Enter 10-digit mobile number"
                 aria-label="Mobile number"
                 value={form.username}
-                onChange={(event) => update("username", event.target.value)}
+                disabled={draftRestoring}
+                onChange={(event) => {
+                  if (lookup.status === "loading") {
+                    lookupSequence.current += 1;
+                    setLookup({ status: "", message: "", tone: "" });
+                  }
+                  update("username", event.target.value);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
@@ -2650,7 +3112,7 @@ export default function MelavaRegistration() {
                   }
                 }}
               />
-              <button type="button" className="btn p" onClick={findCandidate} disabled={lookup.status === "loading"}>
+              <button type="button" className="btn p" onClick={() => findCandidate()} disabled={draftRestoring}>
                 {lookup.status === "loading" ? "Fetching..." : "Fetch / Search Details"}
               </button>
             </div>
@@ -2684,6 +3146,16 @@ export default function MelavaRegistration() {
           </section>
         ) : null}
 
+        {draftConflict ? (
+          <div className="al ok" role="alert">
+            <p>The backend record and local draft have both changed. Choose which version to continue with.</p>
+            <div className="actions">
+              <button type="button" className="btn p" disabled={draftRestoring} onClick={() => resolveDraftConflict(true)}>Restore local draft</button>
+              <button type="button" className="btn g" disabled={draftRestoring} onClick={() => resolveDraftConflict(false)}>Use fetched data</button>
+            </div>
+          </div>
+        ) : null}
+
         {submitError ? <div className="al er">{submitError}</div> : null}
 
         <form
@@ -2712,32 +3184,53 @@ export default function MelavaRegistration() {
                         <label className="repeatable-field" key={field}>
                           <span>{field.replaceAll("_", " ")}</span>
                           {field === "education_level" ? (
-                            <select value={row[field]} onChange={(event) => setEducations((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item))}>
+                            <select value={row[field]} onChange={(event) => {
+                              markDraftDirty();
+                              setEducations((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item));
+                            }}>
                               <option value="">Choose level</option>
                               {EDUCATION_LEVEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                             </select>
                           ) : (
-                            <input value={row[field]} onChange={(event) => setEducations((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item))} />
+                            <input value={row[field]} onChange={(event) => {
+                              markDraftDirty();
+                              setEducations((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item));
+                            }} />
                           )}
                         </label>
                       ))}
-                      {educations.length > 1 && <button type="button" onClick={() => setEducations((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove education</button>}
+                      {educations.length > 1 && <button type="button" onClick={() => {
+                        markDraftDirty();
+                        setEducations((items) => items.filter((_, itemIndex) => itemIndex !== index));
+                      }}>Remove education</button>}
                     </div>
                   ))}
-                  <button type="button" onClick={() => setEducations((items) => [...items, { ...EMPTY_EDUCATION }])}>Add education</button>
+                  <button type="button" onClick={() => {
+                    markDraftDirty();
+                    setEducations((items) => [...items, { ...EMPTY_EDUCATION }]);
+                  }}>Add education</button>
                   <h3>Employment records</h3>
                   {employments.map((row, index) => (
                     <div className="grid" key={`employment-${index}`}>
                       {Object.keys(EMPTY_EMPLOYMENT).map((field) => (
                         <label className="repeatable-field" key={field}>
                           <span>{field.replaceAll("_", " ")}</span>
-                          <input value={row[field]} onChange={(event) => setEmployments((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item))} />
+                          <input value={row[field]} onChange={(event) => {
+                            markDraftDirty();
+                            setEmployments((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item));
+                          }} />
                         </label>
                       ))}
-                      {employments.length > 1 && <button type="button" onClick={() => setEmployments((items) => items.filter((_, itemIndex) => itemIndex !== index))}>Remove employment</button>}
+                      {employments.length > 1 && <button type="button" onClick={() => {
+                        markDraftDirty();
+                        setEmployments((items) => items.filter((_, itemIndex) => itemIndex !== index));
+                      }}>Remove employment</button>}
                     </div>
                   ))}
-                  <button type="button" onClick={() => setEmployments((items) => [...items, { ...EMPTY_EMPLOYMENT }])}>Add employment</button>
+                  <button type="button" onClick={() => {
+                    draftDirtyRef.current = true;
+                    setEmployments((items) => [...items, { ...EMPTY_EMPLOYMENT }]);
+                  }}>Add employment</button>
                 </div>
               )}
             </section>

@@ -61,15 +61,28 @@ class HomeController extends Controller
                 $dated($datedUserQuery);
                 $dated($datedCampaignQuery);
                 $dated($datedRegistrationQuery);
+                $trendStart = now()->subDays(6)->startOfDay();
+                $trendEnd = now()->startOfDay()->addDay();
+                $userTrendCounts = User::where('created_at', '>=', $trendStart)
+                    ->where('created_at', '<', $trendEnd)
+                    ->selectRaw('DATE(created_at) as trend_date, COUNT(*) as total')
+                    ->groupBy('trend_date')
+                    ->pluck('total', 'trend_date');
+                $profileTrendCounts = Profile::where('status', 'active')
+                    ->where('created_at', '>=', $trendStart)
+                    ->where('created_at', '<', $trendEnd)
+                    ->selectRaw('DATE(created_at) as trend_date, COUNT(*) as total')
+                    ->groupBy('trend_date')
+                    ->pluck('total', 'trend_date');
                 $trendLabels = [];
                 $trendUsers = [];
                 $trendProfiles = [];
                 for ($offset = 6; $offset >= 0; $offset--) {
-                    $day = now()->subDays($offset)->startOfDay();
+                    $day = $trendStart->copy()->addDays($offset);
+                    $date = $day->toDateString();
                     $trendLabels[] = $day->format('M d');
-                    $trendUsers[] = User::whereDate('created_at', $day->toDateString())->count();
-                    $trendProfiles[] = Profile::where('status', 'active')
-                        ->whereDate('created_at', $day->toDateString())->count();
+                    $trendUsers[] = (int) ($userTrendCounts[$date] ?? 0);
+                    $trendProfiles[] = (int) ($profileTrendCounts[$date] ?? 0);
                 }
                 $recentProfiles = Profile::where('status', 'active')
                     ->whereBetween('created_at', [now()->subDays(10), now()])
@@ -97,30 +110,37 @@ class HomeController extends Controller
                             'created_at' => $profile->created_at?->toDateTimeString(),
                         ];
                     });
-                $upcomingEvents = DB::table('melava_campaigns')
+                $eventRegistrationCounts = DB::table('profile_melava_registrations')
+                    ->select('melava_campaign_id')
+                    ->selectRaw('COUNT(*) as registrations_count')
+                    ->selectRaw('SUM(CASE WHEN payment_verified = 1 THEN 1 ELSE 0 END) as payment_verified_count');
+                $dated($eventRegistrationCounts);
+                $eventRegistrationCounts->groupBy('melava_campaign_id');
+                $upcomingEvents = DB::table('melava_campaigns as campaign')
+                    ->leftJoinSub(
+                        $eventRegistrationCounts,
+                        'registration_counts',
+                        'campaign.id',
+                        '=',
+                        'registration_counts.melava_campaign_id'
+                    )
+                    ->select('campaign.*')
+                    ->selectRaw('COALESCE(registration_counts.registrations_count, 0) as registrations_count')
+                    ->selectRaw('COALESCE(registration_counts.payment_verified_count, 0) as payment_verified_count')
                     ->where('status', 'active')
                     ->where(function ($query) {
                         $today = now()->toDateString();
-                        $query->where('start_date', '>=', $today)
+                        $query->where('campaign.start_date', '>=', $today)
                             ->orWhere(function ($ongoing) use ($today) {
-                                $ongoing->where('start_date', '<', $today)
-                                    ->where('end_date', '>=', $today);
+                                $ongoing->where('campaign.start_date', '<', $today)
+                                    ->where('campaign.end_date', '>=', $today);
                             });
                     })
-                    ->orderBy('start_date')
+                    ->orderBy('campaign.start_date')
                     ->get()
-                    ->map(function ($campaign) use ($dated) {
-                        $campaign->registrations_count = DB::table('profile_melava_registrations')
-                            ->where('melava_campaign_id', $campaign->id)
-                            ->count();
-                        $eventRegistrationQuery = DB::table('profile_melava_registrations')
-                            ->where('melava_campaign_id', $campaign->id);
-                        $dated($eventRegistrationQuery);
-                        $campaign->registrations_count = (clone $eventRegistrationQuery)->count();
-                        $campaign->payment_verified_count = (clone $eventRegistrationQuery)
-                            ->where('melava_campaign_id', $campaign->id)
-                            ->where('payment_verified', true)
-                            ->count();
+                    ->map(function ($campaign) {
+                        $campaign->registrations_count = (int) $campaign->registrations_count;
+                        $campaign->payment_verified_count = (int) $campaign->payment_verified_count;
                         $today = now()->toDateString();
                         if (! $campaign->start_date) {
                             $campaign->schedule_status = 'Undated';
@@ -133,36 +153,42 @@ class HomeController extends Controller
                         }
                         return $campaign;
                     });
+
+                $profileStats = (clone $datedProfileQuery)
+                    ->selectRaw('COUNT(*) as total')
+                    ->selectRaw("SUM(CASE WHEN verification_status = 'Completed' THEN 1 ELSE 0 END) as verified")
+                    ->selectRaw("SUM(CASE WHEN verification_status = 'Pending' THEN 1 ELSE 0 END) as pending")
+                    ->selectRaw("SUM(CASE WHEN groomorbride = 'Groom' THEN 1 ELSE 0 END) as grooms")
+                    ->selectRaw("SUM(CASE WHEN groomorbride = 'Bride' THEN 1 ELSE 0 END) as brides")
+                    ->first();
+                $campaignStats = (clone $datedCampaignQuery)
+                    ->selectRaw('COUNT(*) as total')
+                    ->selectRaw(
+                        'SUM(CASE WHEN status = ? AND (start_date IS NULL OR start_date >= ?) THEN 1 ELSE 0 END) as upcoming',
+                        ['active', now()->toDateString()]
+                    )
+                    ->first();
+                $registrationStats = (clone $datedRegistrationQuery)
+                    ->selectRaw('COUNT(*) as total')
+                    ->selectRaw('SUM(CASE WHEN payment_verified = 0 THEN 1 ELSE 0 END) as pending')
+                    ->selectRaw('SUM(CASE WHEN payment_verified = 1 THEN 1 ELSE 0 END) as verified')
+                    ->first();
+
                 return response()->json([
                     'success' => true,
                     'data' => [
                         'role' => 'admin',
                         'total_users' => $datedUserQuery->count(),
-                        'total_profiles' => $datedProfileQuery->count(),
-                        'verified_profiles' => (clone $datedProfileQuery)
-                            ->where('verification_status', 'Completed')
-                            ->count(),
-                        'pending_profiles' => (clone $datedProfileQuery)
-                            ->where('verification_status', 'Pending')
-                            ->count(),
-                        'groom_profiles' => (clone $datedProfileQuery)
-                            ->where('groomorbride', 'Groom')->count(),
-                        'bride_profiles' => (clone $datedProfileQuery)
-                            ->where('groomorbride', 'Bride')->count(),
-                        'melava_campaigns' => $datedCampaignQuery->count(),
-                        'upcoming_melava_campaigns' => (clone $datedCampaignQuery)
-                            ->where('status', 'active')
-                            ->where(function ($query) {
-                                $today = now()->toDateString();
-                                $query->whereNull('start_date')
-                                    ->orWhere('start_date', '>=', $today);
-                            })
-                            ->count(),
-                        'melava_registrations' => $datedRegistrationQuery->count(),
-                        'pending_melava_payments' => (clone $datedRegistrationQuery)
-                            ->where('payment_verified', false)->count(),
-                        'verified_melava_payments' => (clone $datedRegistrationQuery)
-                            ->where('payment_verified', true)->count(),
+                        'total_profiles' => (int) ($profileStats->total ?? 0),
+                        'verified_profiles' => (int) ($profileStats->verified ?? 0),
+                        'pending_profiles' => (int) ($profileStats->pending ?? 0),
+                        'groom_profiles' => (int) ($profileStats->grooms ?? 0),
+                        'bride_profiles' => (int) ($profileStats->brides ?? 0),
+                        'melava_campaigns' => (int) ($campaignStats->total ?? 0),
+                        'upcoming_melava_campaigns' => (int) ($campaignStats->upcoming ?? 0),
+                        'melava_registrations' => (int) ($registrationStats->total ?? 0),
+                        'pending_melava_payments' => (int) ($registrationStats->pending ?? 0),
+                        'verified_melava_payments' => (int) ($registrationStats->verified ?? 0),
                         'upcoming_melava_events' => $upcomingEvents,
                         'trend_labels' => $trendLabels,
                         'trend_users' => $trendUsers,
@@ -256,13 +282,22 @@ class HomeController extends Controller
                 $profiles->where('groomorbride', $gender);
             }
 
-            $profileTotal = (clone $profiles)->count();
-            $activeProfiles = (clone $profiles)->where('status', 'active');
-            $verifiedProfiles = (clone $activeProfiles)->where('verification_status', 'Completed')->count();
-            $pendingProfiles = (clone $activeProfiles)->where('verification_status', 'Pending')->count();
-            $inactiveProfiles = (clone $profiles)->where('status', 'deactive')->count();
-            $grooms = (clone $profiles)->where('groomorbride', 'Groom')->count();
-            $brides = (clone $profiles)->where('groomorbride', 'Bride')->count();
+            $profileStats = (clone $profiles)
+                ->selectRaw('COUNT(*) as total')
+                ->selectRaw("SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active")
+                ->selectRaw("SUM(CASE WHEN status = 'deactive' THEN 1 ELSE 0 END) as inactive")
+                ->selectRaw("SUM(CASE WHEN status = 'active' AND verification_status = 'Completed' THEN 1 ELSE 0 END) as verified")
+                ->selectRaw("SUM(CASE WHEN status = 'active' AND verification_status = 'Pending' THEN 1 ELSE 0 END) as pending")
+                ->selectRaw("SUM(CASE WHEN groomorbride = 'Groom' THEN 1 ELSE 0 END) as grooms")
+                ->selectRaw("SUM(CASE WHEN groomorbride = 'Bride' THEN 1 ELSE 0 END) as brides")
+                ->first();
+            $profileTotal = (int) ($profileStats->total ?? 0);
+            $activeProfiles = (int) ($profileStats->active ?? 0);
+            $verifiedProfiles = (int) ($profileStats->verified ?? 0);
+            $pendingProfiles = (int) ($profileStats->pending ?? 0);
+            $inactiveProfiles = (int) ($profileStats->inactive ?? 0);
+            $grooms = (int) ($profileStats->grooms ?? 0);
+            $brides = (int) ($profileStats->brides ?? 0);
 
             $users = DB::table('users');
             $applyDates($users);
@@ -275,15 +310,22 @@ class HomeController extends Controller
             $registrations = DB::table('profile_melava_registrations');
             $applyDates($registrations);
             $registrations->whereIn('profile_id', (clone $profiles)->select('id'));
-            $melavaRegistrationCount = (clone $registrations)->count();
-            $verifiedMelavaPayments = (clone $registrations)->where('payment_verified', true)->count();
-            $pendingMelavaPayments = (clone $registrations)->where('payment_verified', false)->count();
-            $verifiedBookletPayments = Schema::hasColumn('profile_melava_registrations', 'booklet_payment_verified')
-                ? (clone $registrations)->where('is_booklet_req', true)->where('booklet_payment_verified', true)->count()
-                : 0;
-            $pendingBookletPayments = Schema::hasColumn('profile_melava_registrations', 'booklet_payment_verified')
-                ? (clone $registrations)->where('is_booklet_req', true)->where('booklet_payment_verified', false)->count()
-                : 0;
+            $bookletPaymentAvailable = Schema::hasColumn('profile_melava_registrations', 'booklet_payment_verified');
+            $registrationStatsQuery = (clone $registrations)
+                ->selectRaw('COUNT(*) as total')
+                ->selectRaw('SUM(CASE WHEN payment_verified = 1 THEN 1 ELSE 0 END) as verified')
+                ->selectRaw('SUM(CASE WHEN payment_verified = 0 THEN 1 ELSE 0 END) as pending');
+            if ($bookletPaymentAvailable) {
+                $registrationStatsQuery
+                    ->selectRaw('SUM(CASE WHEN is_booklet_req = 1 AND booklet_payment_verified = 1 THEN 1 ELSE 0 END) as verified_booklet')
+                    ->selectRaw('SUM(CASE WHEN is_booklet_req = 1 AND booklet_payment_verified = 0 THEN 1 ELSE 0 END) as pending_booklet');
+            }
+            $registrationStats = $registrationStatsQuery->first();
+            $melavaRegistrationCount = (int) ($registrationStats->total ?? 0);
+            $verifiedMelavaPayments = (int) ($registrationStats->verified ?? 0);
+            $pendingMelavaPayments = (int) ($registrationStats->pending ?? 0);
+            $verifiedBookletPayments = $bookletPaymentAvailable ? (int) ($registrationStats->verified_booklet ?? 0) : 0;
+            $pendingBookletPayments = $bookletPaymentAvailable ? (int) ($registrationStats->pending_booklet ?? 0) : 0;
             $melavaRegistrationCounts = (clone $registrations)
                 ->select('melava_campaign_id')
                 ->selectRaw('COUNT(*) as registration_count')
@@ -302,11 +344,13 @@ class HomeController extends Controller
             $applyDates($melavaEventDetails, 'campaign.created_at');
             $melavaEventDetails = $melavaEventDetails->orderByDesc('registrations')->limit(10)->get();
 
-            $workshopEvents = Schema::hasTable('workshop_events') ? DB::table('workshop_events') : null;
+            $hasWorkshopEvents = Schema::hasTable('workshop_events');
+            $hasWorkshopRegistrations = Schema::hasTable('workshop_registrations');
+            $workshopEvents = $hasWorkshopEvents ? DB::table('workshop_events') : null;
             if ($workshopEvents) {
                 $applyDates($workshopEvents);
             }
-            $workshopRegistrations = Schema::hasTable('workshop_registrations')
+            $workshopRegistrations = $hasWorkshopRegistrations
                 ? DB::table('workshop_registrations')
                 : null;
             if ($workshopRegistrations) {
@@ -315,17 +359,21 @@ class HomeController extends Controller
                     $workshopRegistrations->whereIn('profile_id', (clone $profiles)->select('id'));
                 }
             }
-            $verifiedWorkshopRegistrations = $workshopRegistrations
-                ? (clone $workshopRegistrations)->where('status', 'Verified')->count()
-                : 0;
-            $pendingWorkshopRegistrations = $workshopRegistrations
-                ? (clone $workshopRegistrations)->where('status', 'Pending')->count()
-                : 0;
-            $rejectedWorkshopRegistrations = $workshopRegistrations
-                ? (clone $workshopRegistrations)->where('status', 'Rejected')->count()
-                : 0;
+            $workshopStats = $workshopRegistrations
+                ? (clone $workshopRegistrations)
+                    ->selectRaw('COUNT(*) as total')
+                    ->selectRaw("SUM(CASE WHEN status = 'Verified' THEN 1 ELSE 0 END) as verified")
+                    ->selectRaw("SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) as pending")
+                    ->selectRaw("SUM(CASE WHEN status = 'Rejected' THEN 1 ELSE 0 END) as rejected")
+                    ->first()
+                : null;
+            $verifiedWorkshopRegistrations = (int) ($workshopStats->verified ?? 0);
+            $pendingWorkshopRegistrations = (int) ($workshopStats->pending ?? 0);
+            $rejectedWorkshopRegistrations = (int) ($workshopStats->rejected ?? 0);
             $workshopEventDetails = collect();
-            if ($workshopEvents && $workshopRegistrations && Schema::hasColumn('workshop_registrations', 'workshop_event_id')) {
+            $hasWorkshopEventId = $hasWorkshopRegistrations
+                && Schema::hasColumn('workshop_registrations', 'workshop_event_id');
+            if ($workshopEvents && $workshopRegistrations && $hasWorkshopEventId) {
                 $workshopRegistrationCounts = (clone $workshopRegistrations)
                     ->select('workshop_event_id')
                     ->selectRaw('COUNT(*) as registration_count')
@@ -352,21 +400,25 @@ class HomeController extends Controller
                 ? (clone $profiles)->selectRaw('AVG(profile_completion) as average')
                     ->selectRaw('SUM(CASE WHEN profile_completion < 100 THEN 1 ELSE 0 END) as incomplete')
                 ->selectRaw('SUM(CASE WHEN profile_completion IS NULL THEN 1 ELSE 0 END) as not_scored')
+                ->selectRaw('SUM(CASE WHEN profile_completion >= 0 AND profile_completion < 25 THEN 1 ELSE 0 END) as band_0_24')
+                ->selectRaw('SUM(CASE WHEN profile_completion >= 25 AND profile_completion < 50 THEN 1 ELSE 0 END) as band_25_49')
+                ->selectRaw('SUM(CASE WHEN profile_completion >= 50 AND profile_completion < 75 THEN 1 ELSE 0 END) as band_50_74')
+                ->selectRaw('SUM(CASE WHEN profile_completion >= 75 AND profile_completion < 100 THEN 1 ELSE 0 END) as band_75_99')
+                ->selectRaw('SUM(CASE WHEN profile_completion >= 100 AND profile_completion < 101 THEN 1 ELSE 0 END) as band_100')
                 ->first()
                 : null;
             $completionBands = [];
             if ($completionAvailable) {
                 foreach ([
-                    ['label' => '0-24%', 'min' => 0, 'max' => 25],
-                    ['label' => '25-49%', 'min' => 25, 'max' => 50],
-                    ['label' => '50-74%', 'min' => 50, 'max' => 75],
-                    ['label' => '75-99%', 'min' => 75, 'max' => 100],
-                    ['label' => '100%', 'min' => 100, 'max' => 101],
+                    ['label' => '0-24%', 'key' => 'band_0_24'],
+                    ['label' => '25-49%', 'key' => 'band_25_49'],
+                    ['label' => '50-74%', 'key' => 'band_50_74'],
+                    ['label' => '75-99%', 'key' => 'band_75_99'],
+                    ['label' => '100%', 'key' => 'band_100'],
                 ] as $band) {
                     $completionBands[] = [
                         'label' => $band['label'],
-                        'count' => (clone $profiles)->where('profile_completion', '>=', $band['min'])
-                            ->where('profile_completion', '<', $band['max'])->count(),
+                        'count' => (int) ($completion->{$band['key']} ?? 0),
                     ];
                 }
             }
@@ -393,14 +445,22 @@ class HomeController extends Controller
             if (Schema::hasTable('profile_visitors')) {
                 $visitors = DB::table('profile_visitors')->whereIn('profile_id', (clone $profiles)->select('id'));
                 $applyDates($visitors);
-                $activity['profile_views'] = (clone $visitors)->count();
-                $activity['unique_profiles_viewed'] = (clone $visitors)->distinct('profile_id')->count('profile_id');
+                $visitorStats = (clone $visitors)
+                    ->selectRaw('COUNT(*) as profile_views')
+                    ->selectRaw('COUNT(DISTINCT profile_id) as unique_profiles_viewed')
+                    ->first();
+                $activity['profile_views'] = (int) ($visitorStats->profile_views ?? 0);
+                $activity['unique_profiles_viewed'] = (int) ($visitorStats->unique_profiles_viewed ?? 0);
             }
             if (Schema::hasTable('user_interests')) {
                 $interests = DB::table('user_interests')->whereIn('profile_id', (clone $profiles)->select('id'));
                 $applyDates($interests);
-                $activity['interests'] = (clone $interests)->count();
-                $activity['pending_interests'] = (clone $interests)->where('status', 'pending')->count();
+                $interestStats = (clone $interests)
+                    ->selectRaw('COUNT(*) as interests')
+                    ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_interests")
+                    ->first();
+                $activity['interests'] = (int) ($interestStats->interests ?? 0);
+                $activity['pending_interests'] = (int) ($interestStats->pending_interests ?? 0);
             }
 
             $paymentMetrics = [
@@ -408,16 +468,23 @@ class HomeController extends Controller
                 'verified_entries' => 0,
                 'pending_entries' => 0,
             ];
-            if (Schema::hasTable('payment_screenshots')) {
+            $hasPaymentScreenshots = Schema::hasTable('payment_screenshots');
+            if ($hasPaymentScreenshots) {
                 $payments = DB::table('payment_screenshots')
                     ->whereIn('profile_id', (clone $profiles)->select('id'));
                 $applyDates($payments);
-                $paymentMetrics['entries'] = (clone $payments)->count();
-                $paymentMetrics['verified_entries'] = (clone $payments)->where('payment_verified', true)->count();
-                $paymentMetrics['pending_entries'] = (clone $payments)->where('payment_verified', false)->count();
+                $paymentStats = (clone $payments)
+                    ->selectRaw('COUNT(*) as entries')
+                    ->selectRaw('SUM(CASE WHEN payment_verified = 1 THEN 1 ELSE 0 END) as verified_entries')
+                    ->selectRaw('SUM(CASE WHEN payment_verified = 0 THEN 1 ELSE 0 END) as pending_entries')
+                    ->selectRaw('COUNT(DISTINCT profile_id) as profiles_with_payments')
+                    ->first();
+                $paymentMetrics['entries'] = (int) ($paymentStats->entries ?? 0);
+                $paymentMetrics['verified_entries'] = (int) ($paymentStats->verified_entries ?? 0);
+                $paymentMetrics['pending_entries'] = (int) ($paymentStats->pending_entries ?? 0);
             }
-            $profilesWithPayments = Schema::hasTable('payment_screenshots')
-                ? (clone $payments)->distinct()->count('profile_id')
+            $profilesWithPayments = $hasPaymentScreenshots
+                ? (int) ($paymentStats->profiles_with_payments ?? 0)
                 : 0;
 
             $trendFrom = $from ?: $now->copy()->subMonths(11)->startOfMonth();
@@ -504,7 +571,7 @@ class HomeController extends Controller
                     'generated_at' => now()->toIso8601String(),
                     'total_users' => $users->count(),
                     'total_profiles' => $profileTotal,
-                    'active_profiles' => (clone $profiles)->where('status', 'active')->count(),
+                    'active_profiles' => $activeProfiles,
                     'inactive_profiles' => $inactiveProfiles,
                     'verified_profiles' => $verifiedProfiles,
                     'pending_profiles' => $pendingProfiles,
@@ -517,7 +584,7 @@ class HomeController extends Controller
                     'verified_booklet_payments' => $verifiedBookletPayments,
                     'pending_booklet_payments' => $pendingBookletPayments,
                     'workshop_events' => $workshopEvents ? (clone $workshopEvents)->count() : 0,
-                    'workshop_registrations' => $workshopRegistrations ? (clone $workshopRegistrations)->count() : 0,
+                    'workshop_registrations' => (int) ($workshopStats->total ?? 0),
                     'verified_workshop_registrations' => $verifiedWorkshopRegistrations,
                     'pending_workshop_registrations' => $pendingWorkshopRegistrations,
                     'rejected_workshop_registrations' => $rejectedWorkshopRegistrations,

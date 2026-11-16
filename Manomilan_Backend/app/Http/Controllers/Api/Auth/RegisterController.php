@@ -54,14 +54,15 @@ class RegisterController extends Controller
                 return $user;
             });
 
-            $token = ApiToken::create((int) $user->id);
             $user->load('role');
             $user->setAttribute('portal', $user->portal());
+            $token = ApiToken::create((int) $user->id, ApiToken::CANDIDATE_LIFETIME_SECONDS);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Registration successful',
                 'token' => $token,
+                'expires_at' => ApiToken::expiresAt($token),
                 'user' => $user,
             ], 201);
         } catch (QueryException $e) {

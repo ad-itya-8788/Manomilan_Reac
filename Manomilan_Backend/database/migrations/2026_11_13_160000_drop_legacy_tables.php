@@ -1,8 +1,8 @@
+
 <?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 
 return new class extends Migration
 {
@@ -25,7 +25,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new RuntimeException(
+        throw new \RuntimeException(
             'Legacy data tables were dropped. Restore them from a database backup before rolling back this migration.'
         );
     }

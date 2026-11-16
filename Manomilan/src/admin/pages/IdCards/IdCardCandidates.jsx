@@ -25,11 +25,11 @@ import IdCardPreview from "./IdCardPreview.jsx";
 
 const MAX_BATCH_PRINT = 100;
 const AGES = Array.from({ length: 103 }, (_, index) => index + 18);
-const PREFIX_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
+const PREFIX_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-?$/;
 const PREVIEW_LIMIT = 50;
-const REVEAL_INTERVAL = 170; // ms between each live candidate
-const ROW_SETTLE_TIME = 560; // ms a row shows "assigning" before it locks in
-const PANEL_ANIMATION_MS = 620;
+const REVEAL_INTERVAL = 30;
+const ROW_SETTLE_TIME = 220;
+const PANEL_ANIMATION_MS = 320;
 
 /* -------------------------------------------------------------------------- */
 /*  Self-contained animation styles (iOS-style spring curves)                 */
@@ -46,7 +46,7 @@ const ANIMATION_CSS = `
   pointer-events: none;
   transition:
     grid-template-rows ${PANEL_ANIMATION_MS}ms var(--idcx-spring),
-    opacity 380ms ease,
+    opacity 220ms ease,
     transform ${PANEL_ANIMATION_MS}ms var(--idcx-spring);
 }
 .idcx-collapse.is-open {
@@ -146,7 +146,7 @@ const ANIMATION_CSS = `
   border: 1px solid rgba(13,148,136,.2);
   background: linear-gradient(180deg, rgba(13,148,136,.07), rgba(13,148,136,.015));
   overflow: hidden;
-  animation: idcx-live-in 640ms cubic-bezier(0.32,0.72,0,1) both;
+  animation: idcx-live-in 240ms cubic-bezier(0.32,0.72,0,1) both;
 }
 .idcx-live.is-done { border-color: rgba(34,197,94,.45); }
 @keyframes idcx-live-in { from { opacity: 0; transform: translateY(18px) scale(0.97); } }
@@ -200,7 +200,7 @@ const ANIMATION_CSS = `
   padding: 10px 12px; border-radius: 16px;
   background: rgba(255,255,255,.6);
   border: 1px solid rgba(13,148,136,.12);
-  animation: idcx-item-in 620ms cubic-bezier(0.34,1.4,0.64,1) both;
+  animation: idcx-item-in 220ms cubic-bezier(0.34,1.4,0.64,1) both;
   transition: background 450ms ease, border-color 450ms ease, box-shadow 450ms ease;
 }
 @media (prefers-color-scheme: dark) { .idcx-item { background: rgba(255,255,255,.05); } }
@@ -233,7 +233,7 @@ const ANIMATION_CSS = `
 .idcx-check {
   width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center; color: #fff; background: #22c55e;
-  animation: idcx-check 560ms cubic-bezier(0.34,1.7,0.64,1) both;
+  animation: idcx-check 220ms cubic-bezier(0.34,1.7,0.64,1) both;
 }
 @keyframes idcx-check { from { transform: scale(0) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
 .idcx-spin { animation: idcx-spin 0.9s linear infinite; color: #0d9488; }
@@ -351,10 +351,7 @@ function ScrambleText({ text, active, duration = ROW_SETTLE_TIME }) {
   const [display, setDisplay] = useState(active ? "" : text);
 
   useEffect(() => {
-    if (!active) {
-      setDisplay(text);
-      return undefined;
-    }
+    if (!active) return undefined;
     const startedAt = Date.now();
     const tick = () => {
       const progress = Math.min((Date.now() - startedAt) / duration, 1);
@@ -375,7 +372,7 @@ function ScrambleText({ text, active, duration = ROW_SETTLE_TIME }) {
     return () => window.clearInterval(timer);
   }, [text, active, duration]);
 
-  return <>{display || text}</>;
+  return <>{active ? display || text : text}</>;
 }
 
 /* One candidate row in the live feed: "assigning" -> locked in with a check. */
@@ -417,14 +414,14 @@ function LiveAssignRow({ candidate }) {
 }
 
 /* Live feed: candidates appear one by one while IDs are being assigned. */
-function LiveAssignFeed({ items, updatedCount }) {
+function LiveAssignFeed({ items, updatedCount, onComplete }) {
   const [shown, setShown] = useState(0);
   const [finished, setFinished] = useState(false);
   const feedRef = useRef(null);
 
   useEffect(() => {
     if (shown < items.length) {
-      const timer = window.setTimeout(() => setShown((current) => current + 1), shown === 0 ? 250 : REVEAL_INTERVAL);
+      const timer = window.setTimeout(() => setShown((current) => current + 1), shown === 0 ? 80 : REVEAL_INTERVAL);
       return () => window.clearTimeout(timer);
     }
     const timer = window.setTimeout(() => setFinished(true), ROW_SETTLE_TIME + 150);
@@ -433,8 +430,14 @@ function LiveAssignFeed({ items, updatedCount }) {
 
   useEffect(() => {
     const node = feedRef.current;
-    if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
   }, [shown]);
+
+  useEffect(() => {
+    if (!finished) return undefined;
+    const timer = window.setTimeout(onComplete, 300);
+    return () => window.clearTimeout(timer);
+  }, [finished, onComplete]);
 
   const total = items.length;
   const percent = total ? Math.round((Math.min(shown, total) / total) * 100) : 100;
@@ -478,6 +481,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
   const [prefix, setPrefix] = useState("");
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(25);
+  const [maritalStatus, setMaritalStatus] = useState("");
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState(null);
   const [liveItems, setLiveItems] = useState([]);
@@ -488,8 +492,14 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
   const debouncedPrefix = useDebouncedValue(prefix, 350);
   const activePrefix = debouncedPrefix.trim().toUpperCase();
   const prefixError = prefix.trim() && !PREFIX_PATTERN.test(prefix.trim().toUpperCase())
-    ? "Use letters, numbers and hyphens only, for example AA-02."
+    ? "Use letters and numbers separated by hyphens, for example AA-02 or AA-01-."
     : "";
+
+  useEffect(() => {
+    if (!result || liveItems.length > 0) return undefined;
+    const timer = window.setTimeout(onClose, 400);
+    return () => window.clearTimeout(timer);
+  }, [result, liveItems.length, onClose]);
 
   useEffect(() => {
     if (!PREFIX_PATTERN.test(activePrefix)) {
@@ -509,6 +519,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           age_min: String(ageMin),
           age_max: String(ageMax),
         });
+        if (maritalStatus) params.set("marital_status", maritalStatus);
         const response = await request(`/id-cards/assignment/preview?${params.toString()}`);
         if (id === requestId.current) setPreview(response?.data || null);
       } catch (err) {
@@ -522,7 +533,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [activePrefix, ageMin, ageMax]);
+  }, [activePrefix, ageMin, ageMax, maritalStatus]);
 
   const resetPreview = () => {
     requestId.current += 1;
@@ -578,6 +589,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           prefix: preview.prefix,
           age_min: preview.age_min,
           age_max: preview.age_max,
+          marital_status: preview.marital_status || null,
           overwrite_existing: preview.overwrite_count > 0,
         },
       });
@@ -624,7 +636,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
               onChange={(event) => changePrefix(event.target.value)}
             />
           </label>
-          <p className="idc-assign-help">Letters, numbers and hyphens only. Example: AA-02</p>
+          <p className="idc-assign-help">Use letters and numbers with hyphens, for example AA-02 or AA-01-.</p>
         </div>
 
         <div className="idc-assign-step idcx-step idcx-rise" style={rise(2)}>
@@ -643,6 +655,22 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
             <span>years</span>
           </div>
           <p className="idc-assign-help">Both ages are included in the match.</p>
+          <label className="idc-input idc-assignment-status">
+            <span>Marital status</span>
+            <select
+              value={maritalStatus}
+              onChange={(event) => {
+                setMaritalStatus(event.target.value);
+                resetPreview();
+              }}
+            >
+              <option value="">All marital statuses</option>
+              <option value="Unmarried">Unmarried</option>
+              <option value="Divorced">Divorced</option>
+              <option value="Widowed">Widowed</option>
+              <option value="Separated">Separated</option>
+            </select>
+          </label>
         </div>
 
         <div className="idc-assign-step idc-assign-step-action idcx-step idcx-rise" style={rise(3)}>
@@ -681,7 +709,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
       ) : null}
 
       {result && liveItems.length ? (
-        <LiveAssignFeed items={liveItems} updatedCount={result.updated_count} />
+        <LiveAssignFeed items={liveItems} updatedCount={result.updated_count} onComplete={onClose} />
       ) : null}
 
       {result && !liveItems.length ? (
@@ -791,6 +819,7 @@ export default function IdCardCandidates({ settings }) {
   const [uniqueId, setUniqueId] = useState("");
   const [mobile, setMobile] = useState("");
   const [gender, setGender] = useState("all");
+  const [maritalStatus, setMaritalStatus] = useState("");
   const [ageGroup, setAgeGroup] = useState("all");
   const [assigned, setAssigned] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -826,11 +855,11 @@ export default function IdCardCandidates({ settings }) {
     panelTimer.current = window.setTimeout(() => setAssignmentOpen(true), 30);
   };
 
-  const closeAssignment = () => {
+  const closeAssignment = useCallback(() => {
     window.clearTimeout(panelTimer.current);
     setAssignmentOpen(false);
     panelTimer.current = window.setTimeout(() => setPanelMounted(false), PANEL_ANIMATION_MS + 80);
-  };
+  }, []);
 
   const toggleAssignment = () => {
     if (assignmentOpen) closeAssignment();
@@ -843,6 +872,7 @@ export default function IdCardCandidates({ settings }) {
     if (uniqueId.trim()) params.set("unique_id", uniqueId.trim());
     if (mobile.trim()) params.set("mobile", mobile.trim());
     if (gender !== "all") params.set("gender", gender);
+    if (maritalStatus) params.set("marital_status", maritalStatus);
     if (ageGroup !== "all") params.set("age_group", ageGroup);
     if (assigned !== "all") params.set("assigned", assigned);
     if (dateFrom) params.set("date_from", dateFrom);
@@ -851,7 +881,7 @@ export default function IdCardCandidates({ settings }) {
       if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
     });
     return params;
-  }, [activeSearch, uniqueId, mobile, gender, ageGroup, assigned, dateFrom, dateTo]);
+  }, [activeSearch, uniqueId, mobile, gender, maritalStatus, ageGroup, assigned, dateFrom, dateTo]);
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
@@ -928,7 +958,7 @@ export default function IdCardCandidates({ settings }) {
   }, [pendingAction, printCards, settings]);
 
   const hasFilters = Boolean(
-    activeSearch || uniqueId || mobile || gender !== "all" || ageGroup !== "all"
+    activeSearch || uniqueId || mobile || gender !== "all" || maritalStatus || ageGroup !== "all"
     || assigned !== "all" || dateFrom || dateTo,
   );
 
@@ -937,6 +967,7 @@ export default function IdCardCandidates({ settings }) {
     setUniqueId("");
     setMobile("");
     setGender("all");
+    setMaritalStatus("");
     setAgeGroup("all");
     setAssigned("all");
     setDateFrom("");
@@ -1195,6 +1226,13 @@ export default function IdCardCandidates({ settings }) {
           <option value="all">All genders</option>
           <option value="groom">Groom</option>
           <option value="bride">Bride</option>
+        </select>
+        <select className="ui-select" value={maritalStatus} onChange={(event) => { setMaritalStatus(event.target.value); setPage(1); }} aria-label="Filter by marital status">
+          <option value="">All marital statuses</option>
+          <option value="Unmarried">Unmarried</option>
+          <option value="Divorced">Divorced</option>
+          <option value="Widowed">Widowed</option>
+          <option value="Separated">Separated</option>
         </select>
         <select className="ui-select" value={ageGroup} onChange={(event) => { setAgeGroup(event.target.value); setPage(1); }} aria-label="Filter by age group">
           <option value="all">All age groups</option>

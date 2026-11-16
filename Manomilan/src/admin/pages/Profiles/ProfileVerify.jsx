@@ -282,7 +282,12 @@ export default function ProfileVerify({ params }) {
                           <Eye size={17} />
                         </button>
                       ) : (
-                        <span className="pv-na" title="Nothing uploaded">N/A</span>
+                        <span
+                          className="pv-na"
+                          title="No file uploaded; you can still set this document's verification status."
+                        >
+                          Not uploaded
+                        </span>
                       )}
                     </div>
 

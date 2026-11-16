@@ -69,12 +69,12 @@ class UserManagementController extends Controller
             return redirect()->back()->with('error', 'Cannot reset password for Super Admin.');
         }
 
-        // Reset to default password
-        $user->password = Hash::make('manomilana'); // Default password
+        $defaultPassword = config('candidate.default_password');
+        $user->password = Hash::make($defaultPassword);
         $user->is_password_changed = 0; 
         $user->save();
 
-        return redirect()->back()->with('success', 'Password for ' . $user->name . ' has been reset to "manomilana". They will be asked to change it upon next login.');
+        return redirect()->back()->with('success', 'Password for ' . $user->name . ' has been reset to "' . $defaultPassword . '". They will be asked to change it upon next login.');
         } catch (\Throwable $e) {
             if ($e instanceof \Illuminate\Validation\ValidationException
                 || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException

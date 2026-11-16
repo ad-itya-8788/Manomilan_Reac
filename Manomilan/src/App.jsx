@@ -43,6 +43,7 @@ const WorkshopEvents = lazy(() => import("./admin/pages/workshopEvents/WorkshopE
 const Reports = lazy(() => import("./admin/pages/Reports.jsx"));
 const ResetPasswords = lazy(() => import("./admin/pages/ResetPasswords.jsx"));
 const SystemManagement = lazy(() => import("./admin/pages/SystemManagement.jsx"));
+const DatabaseMaster = lazy(() => import("./admin/pages/DatabaseMaster/DatabaseMaster.jsx"));
 const Tickets = lazy(() => import("./admin/pages/Tickets/Tickets.jsx"));
 const CreateTicket = lazy(() => import("./admin/pages/Tickets/CreateTicket.jsx"));
 const TicketDetail = lazy(() => import("./admin/pages/Tickets/TicketDetail.jsx"));
@@ -100,6 +101,7 @@ const ROUTES = {
   "/admin/success-stories": SuccessStoriesAdmin,
   "/admin/success-stories/create": SuccessStoriesAdmin,
   "/admin/system-management": SystemManagement,
+  "/admin/database-master": DatabaseMaster,
   "/admin/software-tickets": Tickets,
   "/admin/software-tickets/create": CreateTicket,
   "/admin/software-tickets/inactive": () => <Tickets inactive />,
@@ -378,10 +380,10 @@ export default function App() {
   const adminRouteDenied =
     isAdminPath &&
     loggedIn &&
-    session.role === "admin" &&
     !isChangePasswordPath &&
-    adminPermissions !== null &&
-    !permittedAdminRoute;
+    (
+      session.role === "admin" && adminPermissions !== null && !permittedAdminRoute
+    );
   const adminPermissionsPending = isAdminPath
     && loggedIn
     && session.role === "admin"

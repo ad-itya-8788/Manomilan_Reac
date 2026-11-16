@@ -1,4 +1,6 @@
-const configuredApiUrl = import.meta.env.VITE_API_URL || "/api";
+const configuredApiUrl = import.meta.env.DEV
+  ? "/api"
+  : import.meta.env.VITE_API_URL || "/api";
 const API_URL = (() => {
   if (!/^https?:\/\//i.test(configuredApiUrl)) {
     return configuredApiUrl.replace(/\/+$/, "");
@@ -18,6 +20,11 @@ const API_URL = (() => {
 })();
 
 const SESSION_KEY = "auth";
+const CANDIDATE_SESSION_KEY = "candidateAuth";
+const ADMIN_GET_CACHE_TTL_MS = 30000;
+const ADMIN_GET_CACHE_MAX_ENTRIES = 75;
+const adminGetCache = new Map();
+let adminGetCacheVersion = 0;
 
 export class ApiError extends Error {
   constructor(message, status = 0, errors = null) {
@@ -181,21 +188,42 @@ export function apiMediaUrl(value) {
       path = `/uploads${path}`;
     }
 
-    return `${apiOrigin}${path}${parsedUrl.search}${parsedUrl.hash}`;
+    const resolvedPath = `${path}${parsedUrl.search}${parsedUrl.hash}`;
+    return import.meta.env.DEV ? resolvedPath : `${apiOrigin}${resolvedPath}`;
   } catch {
     return mediaPath;
   }
 }
 
-const readStoredSession = () => {
+const readStoredValue = (storage, key) => {
   try {
-    return JSON.parse(sessionStorage.getItem(SESSION_KEY));
+    return JSON.parse(storage.getItem(key));
   } catch {
     return null;
   }
 };
 
+const readStoredSession = () => {
+  const tabSession = readStoredValue(sessionStorage, SESSION_KEY);
+  if (tabSession?.role === "admin") return tabSession;
+
+  const candidateSession = readStoredValue(localStorage, CANDIDATE_SESSION_KEY);
+  return candidateSession?.token
+    ? candidateSession
+    : tabSession;
+};
+
 export const getToken = () => readStoredSession()?.token || "";
+
+const isAdminSessionToken = (token) => {
+  const session = readStoredValue(sessionStorage, SESSION_KEY);
+  return ["admin", "super"].includes(session?.role) && session?.token === token;
+};
+
+const clearAdminGetCache = () => {
+  adminGetCache.clear();
+  adminGetCacheVersion += 1;
+};
 
 const firstValidationError = (body) => {
   const errors = body?.errors;
@@ -207,8 +235,26 @@ const firstValidationError = (body) => {
   return "";
 };
 
-const expireSession = () => {
-  sessionStorage.removeItem(SESSION_KEY);
+let expiryRedirectStarted = false;
+
+const expireSession = (token) => {
+  if (expiryRedirectStarted) return;
+  expiryRedirectStarted = true;
+  clearAdminGetCache();
+
+  const tabSession = readStoredValue(sessionStorage, SESSION_KEY);
+  const candidateSession = readStoredValue(localStorage, CANDIDATE_SESSION_KEY);
+  if (
+    tabSession?.token === token ||
+    (tabSession?.role === "candidate" &&
+      tabSession?.sessionId === candidateSession?.sessionId)
+  ) {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+  if (candidateSession?.token === token) {
+    localStorage.removeItem(CANDIDATE_SESSION_KEY);
+  }
+
   if (window.location.pathname !== "/login") {
     window.location.assign("/login?expired=1");
   }
@@ -235,6 +281,8 @@ export async function request(
     raw = false,
     signal: externalSignal,
     timeoutMs = 60000,
+    cacheTtlMs = ADMIN_GET_CACHE_TTL_MS,
+    cacheBypass = false,
   } = {},
 ) {
   const url = /^https?:\/\//i.test(path)
@@ -242,6 +290,31 @@ export async function request(
     : `${API_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
   const token = getToken();
+  const requestMethod = String(method || "GET").toUpperCase();
+  const cacheKey = requestMethod === "GET" && auth && token && !raw && !externalSignal
+    && isAdminSessionToken(token)
+    ? `${token}:${url}`
+    : null;
+  if (requestMethod !== "GET" && auth && token && isAdminSessionToken(token)) {
+    clearAdminGetCache();
+  }
+  const cacheVersion = adminGetCacheVersion;
+  const cacheTtl = Math.max(0, Number(cacheTtlMs) || 0);
+
+  if (cacheKey) {
+    if (cacheBypass || cacheTtl === 0) {
+      adminGetCache.delete(cacheKey);
+    } else {
+      const cached = adminGetCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        adminGetCache.delete(cacheKey);
+        adminGetCache.set(cacheKey, cached);
+        return JSON.parse(cached.body);
+      }
+      if (cached) adminGetCache.delete(cacheKey);
+    }
+  }
+
   const finalHeaders = { Accept: "application/json", ...headers };
 
   if (auth && token) {
@@ -286,7 +359,7 @@ export async function request(
   }
 
   if (raw) {
-    if (response.status === 401 && auth && token) expireSession();
+    if (response.status === 401 && auth && token) expireSession(token);
     if (!response.ok) {
       const data = await parseBody(response);
       throw new ApiError(
@@ -301,7 +374,8 @@ export async function request(
   const data = await parseBody(response);
 
   if (response.status === 401 && auth && token) {
-    expireSession();
+    clearAdminGetCache();
+    expireSession(token);
   }
 
   if (!response.ok) {
@@ -314,6 +388,16 @@ export async function request(
       response.status,
       data?.errors,
     );
+  }
+
+  if (cacheKey && cacheTtl > 0 && cacheVersion === adminGetCacheVersion) {
+    const body = JSON.stringify(data);
+    if (body !== undefined) {
+      adminGetCache.set(cacheKey, { body, expiresAt: Date.now() + cacheTtl });
+      while (adminGetCache.size > ADMIN_GET_CACHE_MAX_ENTRIES) {
+        adminGetCache.delete(adminGetCache.keys().next().value);
+      }
+    }
   }
 
   return data;

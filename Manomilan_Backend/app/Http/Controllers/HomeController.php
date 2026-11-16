@@ -1207,7 +1207,7 @@ private function createProfileFromSession($paymentScreenshot = null)
 
                 'name' => $formData['fullName'],
 
-                'password' => Hash::make('manomilana'),
+                'password' => Hash::make(config('candidate.default_password')),
 
                 'user_type' => 21,
 

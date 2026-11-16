@@ -33,7 +33,7 @@ const GENDERS = [
 
 const PROFILE_VIEWS = {
   "/admin/profiles": { title: "Profile List", description: "Browse and manage registered profiles.", totalLabel: "Total Profiles" },
-  "/admin/nri-profiles": { title: "NRI Profiles", description: "Profiles matching the existing NRI location criteria.", totalLabel: "Total NRI Profiles" },
+  "/admin/nri-profiles": { title: "NRI Profiles", description: "Profiles whose current residence country is outside India.", totalLabel: "Total NRI Profiles" },
   "/admin/verified-profiles": { title: "Verified Profiles", description: "Profiles with completed identity and birth-date verification.", totalLabel: "Total Verified" },
   "/admin/unverified-profiles": { title: "Unverified Profiles", description: "Profiles still waiting for verification.", totalLabel: "Total Unverified" },
   "/admin/inactive-profiles": { title: "Inactive Profiles", description: "Profiles deactivated by administrators.", totalLabel: "Total Inactive" },
@@ -111,7 +111,7 @@ export default function Profiles() {
   const isNriView = currentPath === "/admin/nri-profiles";
   const isInactiveView = currentPath === "/admin/inactive-profiles";
 
-  const [filters, setFilters] = useState({ gender: "all" });
+  const [filters, setFilters] = useState({ gender: "all", marital_status: "", country: "" });
   const [search, setSearch] = useState("");
   const [ageInput, setAgeInput] = useState({ from: "", to: "" });
   const [registrationDateInput, setRegistrationDateInput] = useState({ from: "", to: "" });
@@ -195,6 +195,7 @@ export default function Profiles() {
     try {
       const data = await getProfiles({
         ...filters,
+        country: isNriView ? filters.country : undefined,
         q: activeQuery,
         age_from: ageFrom || undefined,
         age_to: ageTo || undefined,
@@ -237,6 +238,8 @@ export default function Profiles() {
   const hasFilters = Boolean(
     activeQuery ||
     (filters.gender && filters.gender !== "all") ||
+    filters.marital_status ||
+    (isNriView && filters.country) ||
     ageFrom ||
     ageTo ||
     registrationDateInput.from ||
@@ -246,7 +249,7 @@ export default function Profiles() {
     setSearch("");
     setAgeInput({ from: "", to: "" });
     setRegistrationDateInput({ from: "", to: "" });
-    setFilters({ gender: "all" });
+    setFilters({ gender: "all", marital_status: "", country: "" });
     setPage(1);
   };
 
@@ -259,6 +262,7 @@ export default function Profiles() {
     try {
       await exportProfiles({
         ...filters,
+        country: isNriView ? filters.country : undefined,
         q: activeQuery,
         age_from: ageFrom || undefined,
         age_to: ageTo || undefined,
@@ -353,6 +357,34 @@ export default function Profiles() {
             {GENDERS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
           </select>
 
+          <select
+            className="ui-select"
+            value={filters.marital_status}
+            onChange={setFilter("marital_status")}
+            aria-label="Filter profiles by marital status"
+          >
+            <option value="">All marital statuses</option>
+            <option value="Unmarried">Unmarried</option>
+            <option value="Divorced">Divorced</option>
+            <option value="Widowed">Widowed</option>
+            <option value="Separated">Separated</option>
+          </select>
+
+          {isNriView ? (
+            <select
+              className="ui-select"
+              value={filters.country}
+              onChange={setFilter("country")}
+              aria-label="Filter NRI profiles by country"
+              title="Show NRI profiles from a selected country"
+            >
+              <option value="">All Countries</option>
+              {(result?.country_options || []).map((country) => (
+                <option key={country} value={country}>{country}</option>
+              ))}
+            </select>
+          ) : null}
+
           <div
             className={`ui-date-range ${registrationDateError ? "invalid" : ""}`.trim()}
             role="group"
@@ -426,6 +458,7 @@ export default function Profiles() {
                     <th>Photo</th>
                     <th>Full Name</th>
                     <th>Mobile</th>
+                    {isNriView ? <th>Country</th> : null}
                     <SortHead label="Registered On" field="registration_date" sort={sort} onSort={toggleSort} />
                     <th>Status</th>
                     <th>Action</th>
@@ -435,7 +468,7 @@ export default function Profiles() {
                   {loading && !result &&
                     Array.from({ length: 6 }, (_, i) => (
                       <tr key={i} className="ui-skeleton-row">
-                        <td colSpan={8}><span /></td>
+                        <td colSpan={isNriView ? 9 : 8}><span /></td>
                       </tr>
                     ))}
 
@@ -453,6 +486,7 @@ export default function Profiles() {
                           <RecordEditorName record={p} />
                         </td>
                         <td><span className="ui-muted" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Phone size={13} /> {p.mobile}</span></td>
+                        {isNriView ? <td className="ui-muted">{p.country || "N/A"}</td> : null}
                         <td className="ui-muted">{p.registration_date}</td>
                         <td>
                           <span className={`ui-badge ${done ? "ok" : "wait"}`}>

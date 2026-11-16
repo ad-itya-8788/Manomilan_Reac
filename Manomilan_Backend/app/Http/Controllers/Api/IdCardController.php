@@ -54,11 +54,12 @@ class IdCardController extends Controller
 
         $perPage = (int) ($filters['per_page'] ?? 20);
         $page = (int) ($filters['page'] ?? 1);
-        $stats = [
-            'total' => (clone $query)->count(),
-            'assigned' => (clone $query)->whereNotNull('profile_melava_registrations.unique_id_number')->count(),
-            'unassigned' => (clone $query)->whereNull('profile_melava_registrations.unique_id_number')->count(),
-        ];
+        $stats = (clone $query)
+            ->setEagerLoads([])
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN profile_melava_registrations.unique_id_number IS NOT NULL THEN 1 ELSE 0 END) as assigned')
+            ->selectRaw('SUM(CASE WHEN profile_melava_registrations.unique_id_number IS NULL THEN 1 ELSE 0 END) as unassigned')
+            ->first();
 
         $registrations = $query
             ->orderByDesc('profile_melava_registrations.created_at')
@@ -71,7 +72,11 @@ class IdCardController extends Controller
         return response()->json([
             'success' => true,
             'data' => $registrations,
-            'stats' => $stats,
+            'stats' => [
+                'total' => (int) ($stats->total ?? 0),
+                'assigned' => (int) ($stats->assigned ?? 0),
+                'unassigned' => (int) ($stats->unassigned ?? 0),
+            ],
             'age_groups' => $settings['ageGroups'] ?? [],
         ]);
     }
@@ -110,13 +115,19 @@ class IdCardController extends Controller
         }
 
         $data = $this->validateAssignment($request);
-        $rows = $this->assignmentQuery($data['age_min'], $data['age_max'])
+        $rows = $this->assignmentQuery($data['age_min'], $data['age_max'], $data['marital_status'])
             ->orderBy('pmr.id')
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $this->buildAssignmentPreview($data['prefix'], $data['age_min'], $data['age_max'], $rows),
+            'data' => $this->buildAssignmentPreview(
+                $data['prefix'],
+                $data['age_min'],
+                $data['age_max'],
+                $rows,
+                $data['marital_status'],
+            ),
         ]);
     }
 
@@ -140,12 +151,18 @@ class IdCardController extends Controller
             $lockAcquired = true;
 
             $result = DB::transaction(function () use ($data, $request) {
-                $rows = $this->assignmentQuery($data['age_min'], $data['age_max'])
+                $rows = $this->assignmentQuery($data['age_min'], $data['age_max'], $data['marital_status'])
                     ->orderBy('pmr.id')
                     ->lockForUpdate()
                     ->get();
 
-                $preview = $this->buildAssignmentPreview($data['prefix'], $data['age_min'], $data['age_max'], $rows);
+                $preview = $this->buildAssignmentPreview(
+                    $data['prefix'],
+                    $data['age_min'],
+                    $data['age_max'],
+                    $rows,
+                    $data['marital_status'],
+                );
 
                 if ($preview['overwrite_count'] > 0 && ! $data['overwrite_existing']) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
@@ -154,10 +171,9 @@ class IdCardController extends Controller
                 }
 
                 $userId = $request->user()?->id;
-                $updated = 0;
-                $failed = 0;
+                $updatedAt = now();
                 $updatingIds = [];
-                $numbersById = [];
+                $updates = [];
 
                 foreach ($preview['candidates'] as $candidate) {
                     if (! $candidate['will_update']) {
@@ -165,28 +181,29 @@ class IdCardController extends Controller
                     }
 
                     $updatingIds[] = $candidate['id'];
-                    $numbersById[$candidate['id']] = $candidate['proposed_unique_id_number'];
+                    $updates[] = [
+                        'id' => $candidate['id'],
+                        'profile_id' => $candidate['profile_id'],
+                        'melava_campaign_id' => $candidate['melava_campaign_id'],
+                        'unique_id_number' => $candidate['proposed_unique_id_number'],
+                        'updated_by_user_id' => $userId,
+                        'updated_at' => $updatedAt,
+                    ];
                 }
 
                 if ($updatingIds !== []) {
-                    DB::table('profile_melava_registrations')
-                        ->whereIn('id', $updatingIds)
-                        ->update(['unique_id_number' => null]);
-                }
+                    foreach (array_chunk($updatingIds, 500) as $ids) {
+                        DB::table('profile_melava_registrations')
+                            ->whereIn('id', $ids)
+                            ->update(['unique_id_number' => null]);
+                    }
 
-                foreach ($numbersById as $id => $number) {
-                    $affected = DB::table('profile_melava_registrations')
-                        ->where('id', $id)
-                        ->update([
-                            'unique_id_number' => $number,
-                            'updated_by_user_id' => $userId,
-                            'updated_at' => now(),
-                        ]);
-
-                    if ($affected) {
-                        $updated++;
-                    } else {
-                        $failed++;
+                    foreach (array_chunk($updates, 200) as $batch) {
+                        DB::table('profile_melava_registrations')->upsert(
+                            $batch,
+                            ['id'],
+                            ['unique_id_number', 'updated_by_user_id', 'updated_at']
+                        );
                     }
                 }
 
@@ -194,13 +211,16 @@ class IdCardController extends Controller
                     'prefix' => $preview['prefix'],
                     'age_min' => $preview['age_min'],
                     'age_max' => $preview['age_max'],
+                    'marital_status' => $preview['marital_status'],
                     'matched_count' => $preview['total'],
                     'assigned_count' => $preview['total'],
-                    'updated_count' => $updated,
+                    'updated_count' => count($updates),
                     'newly_assigned_count' => $preview['new_count'],
                     'overwritten_count' => $preview['overwrite_count'],
                     'unchanged_count' => $preview['unchanged_count'],
-                    'failed_count' => $failed,
+                    'existing_id_conflict_count' => $preview['existing_id_conflict_count'],
+                    'existing_id_conflict_numbers' => $preview['existing_id_conflict_numbers'],
+                    'failed_count' => 0,
                 ];
             }, 3);
         } catch (ValidationException $exception) {
@@ -369,6 +389,7 @@ class IdCardController extends Controller
             'unique_id' => ['nullable', 'string', 'max:50'],
             'mobile' => ['nullable', 'string', 'max:30'],
             'gender' => ['nullable', Rule::in(['groom', 'bride'])],
+            'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
             'age_group' => ['nullable', 'string', 'max:20'],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
             'date_to' => ['nullable', 'date_format:Y-m-d'],
@@ -386,6 +407,7 @@ class IdCardController extends Controller
             'prefix' => ['required', 'string', 'max:40'],
             'age_min' => ['required', 'integer', 'min:1', 'max:120'],
             'age_max' => ['required', 'integer', 'min:1', 'max:120'],
+            'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
             'overwrite_existing' => ['nullable', 'boolean'],
         ]);
 
@@ -408,6 +430,7 @@ class IdCardController extends Controller
             'prefix' => $prefix,
             'age_min' => (int) $data['age_min'],
             'age_max' => (int) $data['age_max'],
+            'marital_status' => $data['marital_status'] ?? null,
             'overwrite_existing' => $request->boolean('overwrite_existing'),
         ];
     }
@@ -445,6 +468,11 @@ class IdCardController extends Controller
                 ->whereRaw('LOWER(groomorbride) = ?', [$filters['gender']]));
         }
 
+        if (! empty($filters['marital_status'])) {
+            $query->whereHas('profile', fn ($profileQuery) => $profileQuery
+                ->whereRaw('LOWER(TRIM(marital_status)) = ?', [strtolower($filters['marital_status'])]));
+        }
+
         $ageRange = $this->resolveAgeRange($settings, $filters['age_group'] ?? null);
         if ($ageRange) {
             $query->whereHas('profile', function ($profileQuery) use ($ageRange): void {
@@ -454,10 +482,10 @@ class IdCardController extends Controller
         }
 
         if (! empty($filters['date_from'])) {
-            $query->whereDate('profile_melava_registrations.created_at', '>=', $filters['date_from']);
+            $query->where('profile_melava_registrations.created_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());
         }
         if (! empty($filters['date_to'])) {
-            $query->whereDate('profile_melava_registrations.created_at', '<=', $filters['date_to']);
+            $query->where('profile_melava_registrations.created_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
         }
 
         if (($filters['assigned'] ?? 'all') === 'assigned') {
@@ -478,24 +506,37 @@ class IdCardController extends Controller
         return $query;
     }
 
-    private function assignmentQuery(int $ageMin, int $ageMax)
+    private function assignmentQuery(int $ageMin, int $ageMax, ?string $maritalStatus = null)
     {
-        return DB::table('profile_melava_registrations as pmr')
+        $query = DB::table('profile_melava_registrations as pmr')
             ->join('profiles as p', 'p.id', '=', 'pmr.profile_id')
             ->whereNotNull('p.birth_date')
             ->whereRaw('TIMESTAMPDIFF(YEAR, p.birth_date, CURDATE()) BETWEEN ? AND ?', [$ageMin, $ageMax])
             ->select([
                 'pmr.id',
                 'pmr.profile_id',
+                'pmr.melava_campaign_id',
                 'pmr.unique_id_number',
                 'p.full_name',
                 'p.reg_id',
                 'p.birth_date',
                 DB::raw('TIMESTAMPDIFF(YEAR, p.birth_date, CURDATE()) as calculated_age'),
             ]);
+
+        if ($maritalStatus !== null && $maritalStatus !== '') {
+            $query->whereRaw('LOWER(TRIM(p.marital_status)) = ?', [strtolower(trim($maritalStatus))]);
+        }
+
+        return $query;
     }
 
-    private function buildAssignmentPreview(string $prefix, int $ageMin, int $ageMax, $rows): array
+    private function buildAssignmentPreview(
+        string $prefix,
+        int $ageMin,
+        int $ageMax,
+        $rows,
+        ?string $maritalStatus = null
+    ): array
     {
         $targetIds = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
         $reserved = $this->reservedSerials($prefix, $targetIds);
@@ -504,10 +545,12 @@ class IdCardController extends Controller
         $newCount = 0;
         $overwriteCount = 0;
         $unchangedCount = 0;
+        $existingIdConflicts = [];
         $candidates = [];
 
         foreach ($rows as $row) {
             while (isset($reserved[$serial])) {
+                $existingIdConflicts[] = $this->formatAssignmentNumber($prefix, $serial);
                 $serial++;
             }
 
@@ -527,6 +570,7 @@ class IdCardController extends Controller
             $candidates[] = [
                 'id' => (int) $row->id,
                 'profile_id' => (int) $row->profile_id,
+                'melava_campaign_id' => (int) ($row->melava_campaign_id ?? 0),
                 'full_name' => $row->full_name,
                 'registration_number' => $row->reg_id,
                 'age' => (int) $row->calculated_age,
@@ -546,12 +590,15 @@ class IdCardController extends Controller
             'prefix' => $prefix,
             'age_min' => $ageMin,
             'age_max' => $ageMax,
+            'marital_status' => $maritalStatus,
             'total' => $total,
             'currently_assigned' => $overwriteCount + $unchangedCount,
             'new_count' => $newCount,
             'overwrite_count' => $overwriteCount,
             'unchanged_count' => $unchangedCount,
             'updated_count' => $newCount + $overwriteCount,
+            'existing_id_conflict_count' => count($existingIdConflicts),
+            'existing_id_conflict_numbers' => $existingIdConflicts,
             'format' => $candidates[0]['proposed_unique_id_number'] ?? $this->formatAssignmentNumber($prefix, 1),
             'first_number' => $candidates[0]['proposed_unique_id_number'] ?? null,
             'last_number' => $candidates[$total - 1]['proposed_unique_id_number'] ?? null,
@@ -574,7 +621,7 @@ class IdCardController extends Controller
         $serials = [];
 
         foreach ($values as $value) {
-            if (preg_match($regex, (string) $value, $matches)) {
+            if (preg_match($regex, trim((string) $value), $matches)) {
                 $serials[(int) $matches[1]] = true;
             }
         }

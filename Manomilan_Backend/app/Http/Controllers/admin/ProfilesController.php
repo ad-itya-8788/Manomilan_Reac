@@ -139,17 +139,11 @@ class ProfilesController extends Controller
                 if ($reg_type === 'melava_existing') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->whereIn('profiles.registration_type', ['melava', 'existing'])
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } elseif ($reg_type === 'melava') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->where('profiles.registration_type', 'melava')
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } else {
                     $query->where('registration_type', $reg_type);
                 }
@@ -360,17 +354,11 @@ class ProfilesController extends Controller
                 if ($reg_type === 'melava_existing') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->whereIn('profiles.registration_type', ['melava', 'existing'])
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } elseif ($reg_type === 'melava') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->where('profiles.registration_type', 'melava')
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } else {
                     $query->where('registration_type', $reg_type);
                 }
@@ -508,17 +496,11 @@ class ProfilesController extends Controller
                 if ($reg_type === 'melava_existing') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->whereIn('profiles.registration_type', ['melava', 'existing'])
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } elseif ($reg_type === 'melava') {
                     $query->whereIn('profiles.id', DB::table('profile_melava_registrations')->select('profile_id'))
                         ->where('profiles.registration_type', 'melava')
-                        ->where(function ($q) {
-                            $q->where('profiles.registration_number', 'LIKE', 'MM3%')
-                                ->orWhere('profiles.profile_id', 'LIKE', 'MM3%');
-                        });
+                        ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH);
                 } else {
                     $query->where('registration_type', $reg_type);
                 }
@@ -1391,7 +1373,7 @@ class ProfilesController extends Controller
             if ($oldProfilePhoto && \Illuminate\Support\Facades\Storage::disk('public')->exists($oldProfilePhoto)) {
                 \Illuminate\Support\Facades\Storage::disk('public')->delete($oldProfilePhoto);
             }
-            $data['profile_photo'] = $request->file('profilePhoto')->store('profile_photos', 'public');
+            $data['profile_photo'] = $request->file('profilePhoto')->store('candidate_images', 'public');
         }
 
         // Handle Proof Documents
@@ -1400,7 +1382,7 @@ class ProfilesController extends Controller
                 if ($profile->$proof && \Illuminate\Support\Facades\Storage::disk('public')->exists($profile->$proof)) {
                     \Illuminate\Support\Facades\Storage::disk('public')->delete($profile->$proof);
                 }
-                $data[$proof] = $request->file($proof)->store('uploads', 'public');
+                $data[$proof] = $request->file($proof)->store('candidate_documents', 'public');
             }
         }
 
@@ -1412,7 +1394,7 @@ class ProfilesController extends Controller
             }
 
             foreach ($request->file('additionalPhotos') as $photo) {
-                $path = $photo->store('additional_photos', 'public');
+                $path = $photo->store('candidate_images', 'public');
                 $currentPhotos[] = $path;
             }
             $data['additional_photos'] = $currentPhotos;
@@ -1430,7 +1412,7 @@ class ProfilesController extends Controller
                 'username' => $username,
                 'name' => $profile->fullName ?? 'Unknown',
                 'email' => $profile->email ?? ($username . '@aaryansmanomilan.com'),
-                'password' => bcrypt('manomilana'),
+                'password' => bcrypt(config('candidate.default_password')),
                 'user_type' => '21',
                 'role_id' => 3,
                 'status' => 'active',

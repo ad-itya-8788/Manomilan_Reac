@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CalendarDays, CheckCircle2, Clock3, Download, Eye, FileText, IndianRupee, MapPin, Phone,
-  ReceiptText, ShieldCheck, UserRound, UsersRound, X,
+  BookOpen, ReceiptText, ShieldCheck, UserRound, UsersRound, X,
 } from "lucide-react";
 import { EmptyState, ErrorState, PageHeader, Skeleton, StatusBadge } from "../components/Ui";
 import CandidateLayout from "../components/CandidateLayout";
@@ -33,6 +33,12 @@ function ReceiptCard({ registration }) {
   const [downloadError, setDownloadError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const paid = registration.payment_status === "paid";
+  const bookletRequired = Boolean(registration.booklet_required ?? registration.is_booklet_req);
+  const bookletFee = bookletRequired ? Number(registration.booklet_fee) || 0 : 0;
+  const registrationFee = Number(
+    registration.registration_fee ?? Number(registration.amount || 0) - bookletFee,
+  );
+  const totalAmount = Number(registration.amount ?? registrationFee + bookletFee);
   const paperRef = useRef(null);
 
   const downloadReceipt = async () => {
@@ -96,7 +102,10 @@ function ReceiptCard({ registration }) {
           <div><CalendarDays size={15} /><span><small>Registered on</small><strong>{formatDate(registration.registered_at)}</strong></span></div>
           <div><Clock3 size={15} /><span><small>Event date</small><strong>{formatDate(registration.event_start_date)}</strong></span></div>
           <div><MapPin size={15} /><span><small>Venue</small><strong>{registration.venue || "Not available"}</strong></span></div>
-          <div><ReceiptText size={15} /><span><small>Amount paid</small><strong>{formatAmount(registration.amount, registration.currency)}</strong></span></div>
+          <div><BookOpen size={15} /><span><small>Booklet</small><strong>{bookletRequired ? "Requested" : "Not requested"}</strong></span></div>
+          <div><IndianRupee size={15} /><span><small>Registration fee</small><strong>{formatAmount(registrationFee, registration.currency)}</strong></span></div>
+          <div><BookOpen size={15} /><span><small>Booklet fee</small><strong>{bookletRequired ? formatAmount(bookletFee, registration.currency) : "Not included"}</strong></span></div>
+          <div><ReceiptText size={15} /><span><small>Total amount {bookletRequired ? "(with booklet)" : "(without booklet)"}</small><strong>{formatAmount(totalAmount, registration.currency)}</strong></span></div>
         </div>
         <div className={`cnd-receipt-footer ${paid ? "" : "is-unavailable"}`}>
           <span className="cnd-receipt-status">
@@ -150,7 +159,10 @@ function ReceiptCard({ registration }) {
                   [Phone, "Mobile Number", registration.mobile || "—"],
                   [UsersRound, "Profile For", registration.profile_for || "—"],
                   [MapPin, "City", registration.city || "—"],
-                  [IndianRupee, "Amount Paid", formatAmount(registration.amount, registration.currency)],
+                  [IndianRupee, "Registration Fee", formatAmount(registrationFee, registration.currency)],
+                  [BookOpen, "Booklet Required", bookletRequired ? "Yes - requested" : "No - not requested"],
+                  [BookOpen, "Booklet Fee", bookletRequired ? formatAmount(bookletFee, registration.currency) : "Not included"],
+                  [IndianRupee, bookletRequired ? "Total incl. booklet" : "Total without booklet", formatAmount(totalAmount, registration.currency)],
                 ].map(([Icon, label, value]) => (
                   <div key={label}><span className="candidate-receipt-row-icon"><Icon size={16} /></span><span>{label}</span><b>:</b><strong>{value}</strong></div>
                 ))}

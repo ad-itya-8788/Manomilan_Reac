@@ -13,4 +13,5 @@ export const menuItems = [
   { label: "Success Stories", path: "/admin/success-stories" },
   { label: "Report", path: "/admin/report" },
   { label: "Software Tickets", path: "/admin/software-tickets" },
+  { label: "Database Master", path: "/admin/database-master" },
 ];

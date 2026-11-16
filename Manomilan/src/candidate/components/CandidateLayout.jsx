@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Bell, Heart, Home, Menu, ReceiptText, User, Compass,
+  Bell, Heart, Home, LogOut, Menu, ReceiptText, User, Compass,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import CandidateSidebar from "./CandidateSidebar";
@@ -153,6 +153,15 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
                   />
                 </Link>
               ) : null}
+              <button
+                type="button"
+                className="mm-icon-btn cnd-mobile-logout"
+                onClick={handleLogout}
+                aria-label="Log out"
+                title="Log out"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
           </div>
         </header>

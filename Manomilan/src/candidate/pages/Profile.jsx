@@ -1474,12 +1474,10 @@ export default function CandidateProfile() {
                         <div className="cnd-doc-info">
                           <strong>{label}</strong>
                           <span>{hint}</span>
-                          {doc.file_url ? (
-                            <small className={doc.status === "verified" ? "verified" : ""}>
-                              Uploaded • {String(doc.status || "pending").replace(/_/g, " ")}
-                              {doc.remarks ? ` • ${doc.remarks}` : ""}
-                            </small>
-                          ) : <small>Not uploaded</small>}
+                          <small className={doc.status === "verified" ? "verified" : ""}>
+                            {doc.file_url ? "Uploaded" : "Not uploaded"} • {String(doc.status || "pending").replace(/_/g, " ")}
+                            {doc.remarks ? ` • ${doc.remarks}` : ""}
+                          </small>
                         </div>
                         <div className="cnd-doc-actions">
                           {selected ? (
@@ -1640,14 +1638,10 @@ export default function CandidateProfile() {
                         <div className="cnd-doc-info">
                           <strong>{label}</strong>
                           <span>{hint}</span>
-                          {doc.file_url ? (
-                            <small className={doc.status === "verified" ? "verified" : ""}>
-                              Uploaded • {String(doc.status || "pending").replace(/_/g, " ")}
-                              {doc.remarks ? ` • ${doc.remarks}` : ""}
-                            </small>
-                          ) : (
-                            <small>Not uploaded</small>
-                          )}
+                          <small className={doc.status === "verified" ? "verified" : ""}>
+                            {doc.file_url ? "Uploaded" : "Not uploaded"} • {String(doc.status || "pending").replace(/_/g, " ")}
+                            {doc.remarks ? ` • ${doc.remarks}` : ""}
+                          </small>
                         </div>
                         <div className="cnd-doc-actions">
                           {selected ? (

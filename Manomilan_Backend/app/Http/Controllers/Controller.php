@@ -33,9 +33,7 @@ protected function applyRegistrationTypeScope($query)
     if ($this->isOctober2026Candidate()) {
         // Restrict to the current Melava batch, covering both freshly
         // registered (melava) and re-registered (existing) candidates.
-        // Matching on registration_type (instead of the "MM3-" profile_id
-        // prefix) keeps re-registered existing candidates searchable even
-        // when they retained a legacy profile_id.
+        // Use profile type and batch rather than depending on a display ID format.
         return $query
             ->where('profiles.melava_batch', self::CURRENT_MELAVA_BATCH)
             ->whereIn('profiles.registration_type', ['melava', 'existing']);
@@ -60,9 +58,7 @@ protected function isOctober2026Candidate()
 
     $profile = Profile::find($user->profile_id);
 
-    return $profile
-        && $profile->melava_batch === self::CURRENT_MELAVA_BATCH
-        && strpos((string) $profile->profile_id, 'MM3-') === 0;
+    return $profile && $profile->isMelava3Candidate();
 }
 
 protected function canViewProfileByRegistrationType(Profile $profile)

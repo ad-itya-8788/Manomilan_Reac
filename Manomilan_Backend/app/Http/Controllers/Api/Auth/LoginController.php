@@ -37,7 +37,7 @@ class LoginController extends Controller
                 ], 401);
             }
 
-            if ((string) $user->status === 'inactive' || (string) $user->status === '0') {
+            if (in_array(strtolower(trim((string) $user->status)), ['inactive', '0'], true)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Your account has been deactivated. Please contact the administrator.',
@@ -52,7 +52,11 @@ class LoginController extends Controller
                 ], 403);
             }
 
-            $token = ApiToken::create((int) $user->id);
+            $tokenLifetime = $user->portal() === 'candidate'
+                ? ApiToken::CANDIDATE_LIFETIME_SECONDS
+                : ApiToken::DEFAULT_LIFETIME_SECONDS;
+            $token = ApiToken::create((int) $user->id, $tokenLifetime);
+            $expiresAt = ApiToken::expiresAt($token);
             $user->setAttribute('portal', $user->portal());
             $this->auditLogger->log($user, 'auth.login', 'authentication_security', 'User', $user->id, $user->profile_id, [], []);
 
@@ -60,6 +64,7 @@ class LoginController extends Controller
                 'success' => true,
                 'message' => 'Login successful',
                 'token' => $token,
+                'expires_at' => $expiresAt,
                 'user' => $user->load('profile'),
             ]);
         } catch (Throwable $e) {
@@ -76,6 +81,10 @@ class LoginController extends Controller
     {
         try {
             $user = $request->user();
+            $token = $request->bearerToken();
+            if ($user && $token) {
+                ApiToken::revoke($token, (int) $user->id);
+            }
 
             return response()->json(['success' => true, 'message' => 'Logged out successfully']);
         } catch (Throwable $e) {

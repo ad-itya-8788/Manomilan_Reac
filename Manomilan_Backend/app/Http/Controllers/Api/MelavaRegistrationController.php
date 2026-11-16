@@ -117,6 +117,7 @@ class MelavaRegistrationController extends Controller
             'payment_status' => ['nullable', Rule::in(['pending', 'verified'])],
             'booklet' => ['nullable', Rule::in(['yes', 'no'])],
             'gender' => ['nullable', Rule::in(['groom', 'bride'])],
+            'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
             'melava_number' => ['nullable', 'string', 'max:255'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
@@ -136,6 +137,10 @@ class MelavaRegistrationController extends Controller
             ->when(isset($filters['gender']), fn ($query) => $query->whereHas(
                 'profile',
                 fn ($profile) => $profile->whereRaw('LOWER(groomorbride) = ?', [$filters['gender']])
+            ))
+            ->when(isset($filters['marital_status']), fn ($query) => $query->whereHas(
+                'profile',
+                fn ($profile) => $profile->whereRaw('LOWER(TRIM(marital_status)) = ?', [strtolower($filters['marital_status'])])
             ))
             ->when($filters['melava_number'] ?? null, fn ($query, $number) => $query->whereHas(
                 'campaign',
@@ -229,6 +234,7 @@ class MelavaRegistrationController extends Controller
                 'pending_registration' => [
                     'token' => $pending->token,
                     'mobile' => $pending->mobile,
+                    'updated_at' => $pending->updated_at?->format(DATE_ATOM),
                     'is_existing_website_user' => (bool) $pending->is_existing_website_user,
                     'user_id' => $pending->user_id,
                     'profile_id' => $pending->profile_id,
@@ -264,10 +270,12 @@ class MelavaRegistrationController extends Controller
             $latestEmployment = $profile->employments->last();
             $religion = $profile->religionDetails;
             $family = $profile->familyDetails;
+            $backendVersions = array_filter([$profile->updated_at, $registration?->updated_at]);
 
             return response()->json([
                 'success' => true,
                 'type' => 'website_user',
+                'backend_updated_at' => $backendVersions ? max($backendVersions)->format(DATE_ATOM) : null,
                 'user' => [
                     'id' => $profile->user?->id,
                     'username' => $profile->phone,
@@ -452,7 +460,11 @@ class MelavaRegistrationController extends Controller
             'status' => 'pending',
         ])->save();
 
-        return response()->json(['success' => true, 'token' => $draft->token]);
+        return response()->json([
+            'success' => true,
+            'token' => $draft->token,
+            'updated_at' => $draft->updated_at?->format(DATE_ATOM),
+        ]);
         } catch (\Throwable $e) {
             if ($e instanceof \Illuminate\Validation\ValidationException
                 || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException
@@ -551,7 +563,12 @@ class MelavaRegistrationController extends Controller
             throw ValidationException::withMessages(['melava_campaign_id' => ['This Melava campaign is unavailable.']]);
         }
 
-        $profile = DB::transaction(function () use ($request, $data, $campaign) {
+        $pendingToken = $request->input('pending_registration_token');
+        $pendingToken = is_string($pendingToken) && preg_match('/\A[a-f0-9]{64}\z/i', $pendingToken)
+            ? $pendingToken
+            : null;
+
+        $profile = DB::transaction(function () use ($request, $data, $campaign, $pendingToken) {
             $user = User::where('username', $data['username'])->first();
             $profile = Profile::where('phone', $data['username'])->first();
 
@@ -568,7 +585,7 @@ class MelavaRegistrationController extends Controller
                     'name' => $data['fullName'],
                     'email' => $data['email'] ?? "{$data['username']}@melava.local",
                     'username' => $data['username'],
-                    'password' => Hash::make('manomilana'),
+                    'password' => Hash::make(config('candidate.default_password')),
                     'user_type' => '21',
                     'role_id' => $roleId,
                     'status' => 'active',
@@ -605,8 +622,34 @@ class MelavaRegistrationController extends Controller
                 );
             }
 
+            if ($pendingToken !== null) {
+                $pendingDraft = MelavaPendingRegistration::query()
+                    ->where('token', $pendingToken)
+                    ->where('mobile', $data['username'])
+                    ->where('melava_campaign_id', $campaign->id)
+                    ->where('status', 'pending')
+                    ->lockForUpdate()
+                    ->first();
+                $pendingDraft?->delete();
+            }
+
             return [$profile, $registration];
         });
+
+        if ($pendingToken !== null) {
+            try {
+                if (! Storage::disk('public')->deleteDirectory('melava_pending/'.$pendingToken)) {
+                    Log::warning('Unable to remove temporary files for a submitted Melava registration.', [
+                        'token_prefix' => substr($pendingToken, 0, 8),
+                    ]);
+                }
+            } catch (Throwable $cleanupError) {
+                Log::warning('Unable to remove temporary files for a submitted Melava registration.', [
+                    'token_prefix' => substr($pendingToken, 0, 8),
+                    'error' => $cleanupError->getMessage(),
+                ]);
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -836,16 +879,16 @@ class MelavaRegistrationController extends Controller
             'selfie_photo' => 'selfie_photo',
         ] as $input => $key) {
             if ($request->hasFile($input)) {
-                $photos[$key] = $request->file($input)->store('profile_photos/candidate', 'public');
+                $photos[$key] = $request->file($input)->store('candidate_images', 'public');
             } elseif (! empty($pendingFiles[$input])) {
-                $photos[$key] = $this->promotePendingFile($pendingFiles[$input], 'profile_photos/candidate');
+                $photos[$key] = $this->promotePendingFile($pendingFiles[$input], 'candidate_images');
             }
         }
         if ($request->hasFile('candidate_photos')) {
             $photos['candidate_photos'] = array_values(array_merge(
                 $this->photoPaths($photos['candidate_photos'] ?? []),
                 collect($request->file('candidate_photos'))
-                    ->map(fn ($file) => $file->store('profile_photos/candidate', 'public'))
+                    ->map(fn ($file) => $file->store('candidate_images', 'public'))
                     ->values()
                     ->all()
             ));
@@ -853,7 +896,7 @@ class MelavaRegistrationController extends Controller
             $photos['candidate_photos'] = array_values(array_merge(
                 $this->photoPaths($photos['candidate_photos'] ?? []),
                 array_map(
-                fn (string $path) => $this->promotePendingFile($path, 'profile_photos/candidate'),
+                fn (string $path) => $this->promotePendingFile($path, 'candidate_images'),
                 $pendingFiles['candidate_photos']
                 )
             ));
@@ -862,7 +905,7 @@ class MelavaRegistrationController extends Controller
             $photos['additional_photos'] = array_values(array_merge(
                 $this->photoPaths($photos['additional_photos'] ?? []),
                 collect($request->file('additionalPhotos'))
-                    ->map(fn ($file) => $file->store('profile_photos/candidate', 'public'))
+                    ->map(fn ($file) => $file->store('candidate_images', 'public'))
                     ->values()
                     ->all()
             ));
@@ -870,7 +913,7 @@ class MelavaRegistrationController extends Controller
             $photos['additional_photos'] = array_values(array_merge(
                 $this->photoPaths($photos['additional_photos'] ?? []),
                 array_map(
-                    fn (string $path) => $this->promotePendingFile($path, 'profile_photos/candidate'),
+                    fn (string $path) => $this->promotePendingFile($path, 'candidate_images'),
                     $pendingFiles['additional_photos']
                 )
             ));
@@ -1051,12 +1094,12 @@ class MelavaRegistrationController extends Controller
         $educationCertificatePath = null;
         foreach ($documentMap as $input => $column) {
             if ($request->hasFile($input) && ! isset($documentData[$column])) {
-                $documentData[$column] = $request->file($input)->store('profile_documents', 'public');
+                $documentData[$column] = $request->file($input)->store('candidate_documents', 'public');
                 if ($column === 'education_certificate') {
                     $educationCertificatePath = $documentData[$column];
                 }
             } elseif (! empty($pendingFiles[$input]) && ! isset($documentData[$column])) {
-                $documentData[$column] = $this->promotePendingFile($pendingFiles[$input], 'profile_documents');
+                $documentData[$column] = $this->promotePendingFile($pendingFiles[$input], 'candidate_documents');
                 if ($column === 'education_certificate') {
                     $educationCertificatePath = $documentData[$column];
                 }
@@ -1334,6 +1377,8 @@ class MelavaRegistrationController extends Controller
                 ?: $employment?->employment_city
                 ?: $education?->education_city,
             'created_at' => $registration->created_at?->format(DATE_ATOM),
+            'updated_at' => $registration->updated_at?->format(DATE_ATOM),
+            'profile_updated_at' => $profile?->updated_at?->format(DATE_ATOM),
             'registration_type' => $profile?->registration_type,
             'payment_verified' => (bool) $registration->payment_verified,
             'payment_screenshot' => $registration->payment_screenshot,

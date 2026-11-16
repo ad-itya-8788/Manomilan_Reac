@@ -25,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        $middleware->replace(
+            \Illuminate\Http\Middleware\TrustProxies::class,
+            \App\Http\Middleware\TrustProxies::class
+        );
         $middleware->alias([
             'auth.api-token' => AuthenticateApiToken::class,
             'audit.api' => AuditApiActivity::class,

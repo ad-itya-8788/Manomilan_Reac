@@ -20,7 +20,7 @@ class ForcePasswordChange
         if (Auth::check()) {
             $user = Auth::user();
 
-            // Bypass for Melava 3 candidates (MM3- prefix and october_2026 batch)
+            // Bypass for candidates in the current Melava batch.
             if ($user->profile_id) {
                 $profile = \App\Profile::find($user->profile_id);
                 if ($profile && $profile->isMelava3Candidate()) {

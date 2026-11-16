@@ -34,11 +34,12 @@ const EMPTY_STATS = {
   attended: 0,
 };
 
-const fetchRegistrations = ({ query, booklet, gender, melavaNumber, age, page, includeFilters }) => {
+const fetchRegistrations = ({ query, booklet, gender, maritalStatus, melavaNumber, age, page, includeFilters }) => {
   const params = new URLSearchParams({ per_page: "20", page: String(page) });
   if (query) params.set("q", query);
   if (booklet !== "all") params.set("booklet", booklet);
   if (gender !== "all") params.set("gender", gender);
+  if (maritalStatus) params.set("marital_status", maritalStatus);
   if (melavaNumber !== "all") params.set("melava_number", melavaNumber);
   if (age.from) params.set("age_from", age.from);
   if (age.to) params.set("age_to", age.to);
@@ -69,6 +70,7 @@ export default function MelavaPayments() {
   const [search, setSearch] = useState("");
   const [booklet, setBooklet] = useState("all");
   const [gender, setGender] = useState("all");
+  const [maritalStatus, setMaritalStatus] = useState("");
   const [melavaNumber, setMelavaNumber] = useState("all");
   const [melavaNumbers, setMelavaNumbers] = useState([]);
   const [ageInput, setAgeInput] = useState({ from: "", to: "" });
@@ -110,6 +112,7 @@ export default function MelavaPayments() {
         query: activeQuery,
         booklet,
         gender,
+        maritalStatus,
         melavaNumber,
         age: { from: ageFrom, to: ageTo },
         page,
@@ -131,7 +134,7 @@ export default function MelavaPayments() {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [activeQuery, booklet, gender, melavaNumber, ageFrom, ageTo, ageError, page]);
+  }, [activeQuery, booklet, gender, maritalStatus, melavaNumber, ageFrom, ageTo, ageError, page]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 0);
@@ -139,13 +142,14 @@ export default function MelavaPayments() {
   }, [load]);
 
   const hasFilters = Boolean(
-    activeQuery || booklet !== "all" || gender !== "all" || melavaNumber !== "all" || ageFrom || ageTo,
+    activeQuery || booklet !== "all" || gender !== "all" || maritalStatus || melavaNumber !== "all" || ageFrom || ageTo,
   );
 
   const clearFilters = () => {
     setSearch("");
     setBooklet("all");
     setGender("all");
+    setMaritalStatus("");
     setMelavaNumber("all");
     setAgeInput({ from: "", to: "" });
     setPage(1);
@@ -308,11 +312,11 @@ export default function MelavaPayments() {
             className="ui-select"
             value={booklet}
             onChange={(event) => { setBooklet(event.target.value); setPage(1); }}
-            aria-label="Filter by booklet"
+            aria-label="Filter by booklet requirement"
           >
-            <option value="all">All users</option>
-            <option value="yes">Booklet requested</option>
-            <option value="no">No booklet</option>
+            <option value="all">All booklet statuses</option>
+            <option value="yes">Booklet required</option>
+            <option value="no">Booklet not required</option>
           </select>
           <select
             className="ui-select"
@@ -323,6 +327,18 @@ export default function MelavaPayments() {
             <option value="all">All genders</option>
             <option value="groom">Groom</option>
             <option value="bride">Bride</option>
+          </select>
+          <select
+            className="ui-select"
+            value={maritalStatus}
+            onChange={(event) => { setMaritalStatus(event.target.value); setPage(1); }}
+            aria-label="Filter by marital status"
+          >
+            <option value="">All marital statuses</option>
+            <option value="Unmarried">Unmarried</option>
+            <option value="Divorced">Divorced</option>
+            <option value="Widowed">Widowed</option>
+            <option value="Separated">Separated</option>
           </select>
           <select
             className="ui-select"
@@ -363,6 +379,7 @@ export default function MelavaPayments() {
                   <th>Candidate</th>
                   <th>Type</th>
                   <th>Melava Number</th>
+                  <th>Booklet</th>
                   <th>City</th>
                   <th>Registration Type</th>
                   <th>Registered On</th>
@@ -372,12 +389,12 @@ export default function MelavaPayments() {
               <tbody>
                 {loading && !registrations.length ? Array.from({ length: 6 }, (_, index) => (
                   <tr className="ui-skeleton-row" key={`skeleton-${index}`}>
-                    <td colSpan="7"><span /></td>
+                    <td colSpan="8"><span /></td>
                   </tr>
                 )) : null}
                 {!loading && !registrations.length ? (
                   <tr>
-                    <td colSpan="7">
+                    <td colSpan="8">
                       <div className="ui-state">
                         <Search size={30} />
                         <strong>No registrations found</strong>
@@ -416,6 +433,11 @@ export default function MelavaPayments() {
                         </span>
                       </td>
                       <td><span className="ui-chip">{row.melava_number || row.melava_title || "-"}</span></td>
+                      <td>
+                        <span className={`ui-badge ${row.is_booklet_req ? "ok" : "neutral"}`}>
+                          {row.is_booklet_req ? "Required" : "Not required"}
+                        </span>
+                      </td>
                       <td>{row.profile?.professionalCity || row.city || "-"}</td>
                       <td>{row.profile?.registration_type === "existing" ? "Existing" : "Melava"}</td>
                       <td className="ui-muted">{formatDate(row.melava_registered_at || row.created_at)}</td>

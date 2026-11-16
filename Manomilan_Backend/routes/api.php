@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\PreferenceController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ReceiptController;
 use App\Http\Controllers\Api\SystemManagementController;
+use App\Http\Controllers\Api\SuperAdmin\DatabaseMasterController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\WebsiteManagementController;
 use App\Http\Controllers\Api\WorkshopRegistrationController;
@@ -56,6 +57,9 @@ Route::get('/success-stories/{id}', [
     SuccessStoryController::class,
     'publicShow'
 ])->whereNumber('id');
+
+Route::get('/auth/status', fn () => response()->noContent())
+    ->middleware('auth.api-token');
 
 Route::middleware(['auth.api-token', 'rbac.api', 'audit.api', 'record.editor-names'])->group(function () {
     // Admin Success Stories APIs
@@ -259,3 +263,28 @@ Route::prefix('admin/success-stories')->group(function () {
         Route::delete('/notifications/{id}', [CandidateNotificationController::class, 'destroy'])->whereNumber('id');
     });
 });
+
+Route::middleware(['auth.api-token', 'superadmin'])
+    ->prefix('database-master')
+    ->group(function () {
+        Route::get('/search', [DatabaseMasterController::class, 'search']);
+        Route::get('/candidates/{profile}', [DatabaseMasterController::class, 'show'])->whereNumber('profile');
+        Route::put('/candidates/{profile}', [DatabaseMasterController::class, 'update'])->whereNumber('profile');
+        Route::get('/candidates/{profile}/related/{table}', [DatabaseMasterController::class, 'related'])
+            ->whereNumber('profile')
+            ->where('table', '[A-Za-z0-9_]+');
+        Route::put('/candidates/{profile}/related/{table}/{record}', [DatabaseMasterController::class, 'updateRelated'])
+            ->whereNumber('profile')
+            ->where('table', '[A-Za-z0-9_]+')
+            ->whereNumber('record');
+        Route::delete('/candidates/{profile}/related/{table}/{record}', [DatabaseMasterController::class, 'deleteRelated'])
+            ->whereNumber('profile')
+            ->where('table', '[A-Za-z0-9_]+')
+            ->whereNumber('record');
+        Route::post('/candidates/{profile}/password', [DatabaseMasterController::class, 'password'])->whereNumber('profile');
+        Route::get('/candidates/{profile}/dependencies', [DatabaseMasterController::class, 'dependencies'])->whereNumber('profile');
+        Route::delete('/candidates/{profile}', [DatabaseMasterController::class, 'destroy'])->whereNumber('profile');
+        Route::get('/tables', [DatabaseMasterController::class, 'tables']);
+        Route::get('/tables/{table}', [DatabaseMasterController::class, 'table'])->where('table', '[A-Za-z0-9_]+');
+        Route::get('/audit-logs', [DatabaseMasterController::class, 'audit']);
+    });

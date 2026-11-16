@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\DocumentVerification;
 use App\Http\Controllers\Controller;
+use App\Models\CandidateNotification;
 use App\ProfileMelavaRegistration;
 use App\ProfileDocument;
 use App\ProfileFamilyDetail;
@@ -181,10 +182,12 @@ class ProfileController extends Controller
         $request->validate([
             'verification_status' => ['nullable', Rule::in(['verified', 'unverified'])],
             'nri' => ['nullable', 'boolean'],
+            'country' => ['nullable', 'string', 'max:255'],
             'age_from' => ['nullable', 'integer', 'min:1', 'max:120'],
             'age_to' => ['nullable', 'integer', 'min:1', 'max:120'],
             'registered_from' => ['nullable', 'date_format:Y-m-d'],
             'registered_to' => ['nullable', 'date_format:Y-m-d'],
+            'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
@@ -192,10 +195,12 @@ class ProfileController extends Controller
         $gender = $request->input('gender');
         $verificationStatus = $request->input('verification_status');
         $nri = $request->boolean('nri');
+        $country = trim((string) $request->input('country', ''));
         $ageFrom = $request->filled('age_from') ? (int) $request->input('age_from') : null;
         $ageTo = $request->filled('age_to') ? (int) $request->input('age_to') : null;
         $registeredFrom = $request->input('registered_from');
         $registeredTo = $request->input('registered_to');
+        $maritalStatus = $request->input('marital_status');
 
         if ($ageFrom !== null && $ageTo !== null && $ageFrom > $ageTo) {
             return response()->json([
@@ -220,7 +225,7 @@ class ProfileController extends Controller
 
         $today = Carbon::today();
 
-        $applyFilters = function ($query) use ($q, $gender, $verificationStatus, $nri, $ageFrom, $ageTo, $registeredFrom, $registeredTo, $today) {
+        $applyFilters = function ($query) use ($q, $gender, $verificationStatus, $nri, $country, $ageFrom, $ageTo, $registeredFrom, $registeredTo, $maritalStatus, $today) {
             return $query
                 ->when($q !== '', function ($query) use ($q) {
                     $query->where(function ($sub) use ($q) {
@@ -251,16 +256,15 @@ class ProfileController extends Controller
                     $query->where('profiles.verification_status', 'Pending');
                 })
                 ->when($ageFrom !== null, function ($query) use ($ageFrom, $today) {
-                    $query->whereNotNull('profiles.birth_date')
-                        ->whereDate('profiles.birth_date', '<=', $today->copy()->subYears($ageFrom)->toDateString());
+                    $query->where('profiles.birth_date', '<=', $today->copy()->subYears($ageFrom)->toDateString());
                 })
                 ->when($ageTo !== null, function ($query) use ($ageTo, $today) {
-                    $query->whereNotNull('profiles.birth_date')
-                        ->whereDate('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
+                    $query->where('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
                 })
-                ->when($registeredFrom, fn ($query) => $query->whereDate('profiles.created_at', '>=', $registeredFrom))
-                ->when($registeredTo, fn ($query) => $query->whereDate('profiles.created_at', '<=', $registeredTo))
-                ->when($nri, fn ($query) => NriProfileScope::apply($query));
+                ->when($registeredFrom, fn ($query) => $query->where('profiles.created_at', '>=', $registeredFrom.' 00:00:00'))
+                ->when($registeredTo, fn ($query) => $query->where('profiles.created_at', '<', Carbon::parse($registeredTo)->addDay()->startOfDay()))
+                ->when($maritalStatus, fn ($query) => $query->whereRaw('LOWER(TRIM(profiles.marital_status)) = ?', [strtolower($maritalStatus)]))
+                ->when($nri, fn ($query) => NriProfileScope::apply($query, $country));
         };
 
         $baseAll = $applyFilters(Profile::query());
@@ -281,56 +285,24 @@ class ProfileController extends Controller
             ->select([
                 'profiles.id',
                 'profiles.reg_id',
-                'profiles.groomorbride',
                 'profiles.full_name',
-                'profiles.birth_date',
-                'profiles.height_cm',
-                'profiles.weight_kg',
-                'profiles.has_spectacles',
-                'profiles.blood_group',
-                'profiles.mother_tongue',
-                'profiles.languages',
-                'profiles.special_cases',
-                'profiles.about_me',
-                'profiles.profile_photo',
-                'profiles.full_body_photo',
-                'profiles.half_body_photo',
-                'profiles.selfie_photo',
-                'profiles.candidate_photos',
-                'profiles.additional_photos',
-                'profiles.monthly_income',
-                'profiles.annual_income',
-                'profiles.personal_medical_history',
-                'profiles.current_medical_problems',
-                'profiles.medications',
-                'profiles.birth_place',
-                'profiles.birth_time',
-                'profiles.creator_relation',
-                'profiles.addresses',
-                'profiles.verification_status',
-                'profiles.status',
                 'profiles.phone',
-                'profiles.email',
+                'profiles.profile_photo',
+                'profiles.additional_photos',
+                'profiles.addresses',
                 'profiles.created_at',
                 'profiles.updated_by_user_id',
             ])
             ->with([
-                'user:profile_id,username,email',
+                'user:profile_id,username',
                 'documentVerification',
-                'familyDetails',
-                'educations',
-                'employments',
-                'religionDetails',
                 'profileDocuments',
-                'partnerPreferences',
-                'profileMelavaRegistrations.campaign',
             ])
             ->withExists([
                 'paymentScreenshots as has_verified_payment_screenshot' => fn ($paymentQuery) => $paymentQuery
                     ->where('payment_verified', true),
                 'profileMelavaRegistrations as has_verified_melava_payment' => fn ($registrationQuery) => $registrationQuery
                     ->where('payment_verified', true),
-                'melavaRegistrations as melava_registration_exists',
             ]);
 
         if ($sortBy === 'registration_number') {
@@ -344,7 +316,7 @@ class ProfileController extends Controller
         $total = (int) ($stats->total ?? 0);
 
         return response()->json([
-            'data' => $profiles->getCollection()->map(fn (Profile $profile) => $this->presentProfile($profile, true, true))->values(),
+            'data' => $profiles->getCollection()->map(fn (Profile $profile) => $this->presentProfileListItem($profile))->values(),
             'current_page' => $profiles->currentPage(),
             'last_page' => $profiles->lastPage(),
             'per_page' => $profiles->perPage(),
@@ -357,6 +329,7 @@ class ProfileController extends Controller
                 'unverified' => (int) ($stats->unverified ?? 0),
                 'inactive' => $inactiveTotal,
             ],
+            'country_options' => $nri ? NriProfileScope::countryOptions() : [],
         ]);
         } catch (\Throwable $e) {
             if ($e instanceof \Illuminate\Validation\ValidationException
@@ -386,20 +359,24 @@ class ProfileController extends Controller
         $request->validate([
             'verification_status' => ['nullable', Rule::in(['verified', 'unverified'])],
             'nri' => ['nullable', 'boolean'],
+            'country' => ['nullable', 'string', 'max:255'],
             'age_from' => ['nullable', 'integer', 'min:1', 'max:120'],
             'age_to' => ['nullable', 'integer', 'min:1', 'max:120'],
             'registered_from' => ['nullable', 'date_format:Y-m-d'],
             'registered_to' => ['nullable', 'date_format:Y-m-d'],
+            'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
         ]);
 
         $q = trim((string) $request->input('q', ''));
         $gender = $request->input('gender');
         $verificationStatus = $request->input('verification_status');
         $nri = $request->boolean('nri');
+        $country = trim((string) $request->input('country', ''));
         $ageFrom = $request->filled('age_from') ? (int) $request->input('age_from') : null;
         $ageTo = $request->filled('age_to') ? (int) $request->input('age_to') : null;
         $registeredFrom = $request->input('registered_from');
         $registeredTo = $request->input('registered_to');
+        $maritalStatus = $request->input('marital_status');
         $today = Carbon::today();
 
         if ($registeredFrom && $registeredTo && $registeredFrom > $registeredTo) {
@@ -454,18 +431,17 @@ class ProfileController extends Controller
                 $query->where('profiles.verification_status', 'Pending');
             })
             ->when($ageFrom !== null, function ($query) use ($ageFrom, $today) {
-                $query->whereNotNull('profiles.birth_date')
-                    ->whereDate('profiles.birth_date', '<=', $today->copy()->subYears($ageFrom)->toDateString());
+                $query->where('profiles.birth_date', '<=', $today->copy()->subYears($ageFrom)->toDateString());
             })
             ->when($ageTo !== null, function ($query) use ($ageTo, $today) {
-                $query->whereNotNull('profiles.birth_date')
-                    ->whereDate('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
+                $query->where('profiles.birth_date', '>', $today->copy()->subYears($ageTo + 1)->toDateString());
             })
-            ->when($registeredFrom, fn ($query) => $query->whereDate('profiles.created_at', '>=', $registeredFrom))
-            ->when($registeredTo, fn ($query) => $query->whereDate('profiles.created_at', '<=', $registeredTo));
+            ->when($registeredFrom, fn ($query) => $query->where('profiles.created_at', '>=', $registeredFrom.' 00:00:00'))
+            ->when($registeredTo, fn ($query) => $query->where('profiles.created_at', '<', Carbon::parse($registeredTo)->addDay()->startOfDay()))
+            ->when($maritalStatus, fn ($query) => $query->whereRaw('LOWER(TRIM(profiles.marital_status)) = ?', [strtolower($maritalStatus)]));
 
         if ($nri) {
-            $query = NriProfileScope::apply($query);
+            $query = NriProfileScope::apply($query, $country);
         }
 
         if ($sortBy === 'registration_number') {
@@ -1088,12 +1064,12 @@ class ProfileController extends Controller
             'selfie_photo' => 'selfie_photo',
         ] as $input => $key) {
             if ($request->hasFile($input)) {
-                $storedPhotos[$key] = $request->file($input)->store('profile_photos/candidate', 'public');
+                $storedPhotos[$key] = $request->file($input)->store('candidate_images', 'public');
             }
         }
         if ($request->hasFile('candidate_photos')) {
             $storedPhotos['candidate_photos'] = collect($request->file('candidate_photos'))
-                ->map(fn ($file) => $file->store('profile_photos/candidate', 'public'))
+                ->map(fn ($file) => $file->store('candidate_images', 'public'))
                 ->values()
                 ->all();
         }
@@ -1200,6 +1176,11 @@ class ProfileController extends Controller
                 if ($removePhotoPaths) {
                     foreach ($photoPaths as $key => $value) {
                         if (is_array($value)) {
+                            $removedPaths = array_filter(
+                                $value,
+                                fn ($path) => in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)
+                            );
+                            $oldPhotoPaths = array_merge($oldPhotoPaths, $removedPaths);
                             $photoPaths[$key] = array_values(array_filter(
                                 $value,
                                 fn ($path) => ! in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)
@@ -1214,12 +1195,10 @@ class ProfileController extends Controller
                             fn ($path) => ! in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)
                         ));
                     }
-                    foreach (['profilePhoto', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $column) {
-                        if (in_array($column, $columns, true)
-                            && in_array($this->normalizePhotoPath($locked->getAttribute($column)), $removePhotoPaths, true)) {
-                            $locked->setAttribute($column, null);
-                        }
-                    }
+                    $oldPhotoPaths = array_merge(
+                        $oldPhotoPaths,
+                        $this->removePhotoColumnReferences($locked, $columns, $removePhotoPaths)
+                    );
                     if (Schema::hasTable('profile_melava_registrations')
                         && Schema::hasColumn('profile_melava_registrations', 'candidate_photos')) {
                         $registrations = ProfileMelavaRegistration::where('profile_id', $locked->id)->get();
@@ -1228,14 +1207,19 @@ class ProfileController extends Controller
                             if (is_string($paths)) {
                                 $paths = json_decode($paths, true) ?: [];
                             }
+                            $paths = is_array($paths) ? $paths : [];
+                            $removedPaths = array_filter(
+                                $paths,
+                                fn ($path) => in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)
+                            );
+                            $oldPhotoPaths = array_merge($oldPhotoPaths, $removedPaths);
                             $registration->candidate_photos = array_values(array_filter(
-                                is_array($paths) ? $paths : [],
+                                $paths,
                                 fn ($path) => ! in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)
                             ));
                             $registration->save();
                         }
                     }
-                    $oldPhotoPaths = array_merge($oldPhotoPaths, $removePhotoPaths);
                 }
 
                 foreach ($storedPhotos as $key => $path) {
@@ -1342,7 +1326,7 @@ class ProfileController extends Controller
                         'username' => $username,
                         'name' => $locked->fullName ?: 'Unknown',
                         'email' => $locked->email ?: ($username.'@candidate.local'),
-                        'password' => bcrypt('manomilana'),
+                        'password' => bcrypt(config('candidate.default_password')),
                         'user_type' => '21',
                         'role_id' => 3,
                         'status' => 'active',
@@ -1745,19 +1729,22 @@ class ProfileController extends Controller
             return response()->json(['success' => false, 'message' => 'Profile not found.'], 404);
         }
 
-        if ($profile->status === 'deactive') {
-            return response()->json(['success' => true, 'message' => 'Profile is already inactive.']);
-        }
+        $wasInactive = $profile->status === 'deactive';
 
         try {
             DB::transaction(function () use ($profile) {
                 $profile->status = 'deactive';
                 $profile->save();
+
+                User::where('profile_id', $profile->id)
+                    ->update(['status' => 'inactive']);
             });
 
             return response()->json([
                 'success' => true,
-                'message' => 'Profile deactivated successfully.',
+                'message' => $wasInactive
+                    ? 'Profile is already inactive.'
+                    : 'Profile deactivated successfully.',
             ]);
         } catch (Throwable $e) {
             report($e);
@@ -1784,6 +1771,9 @@ class ProfileController extends Controller
             DB::transaction(function () use ($profile) {
                 $profile->status = 'active';
                 $profile->save();
+
+                User::where('profile_id', $profile->id)
+                    ->update(['status' => 'active']);
             });
 
             return response()->json([
@@ -1887,9 +1877,53 @@ class ProfileController extends Controller
         $data = $request->validate($rules);
 
         try {
-            DB::transaction(function () use ($profile, $data) {
+            $rejectedDocuments = [];
+            DB::transaction(function () use ($profile, $data, &$rejectedDocuments) {
+                $previousVerification = DocumentVerification::where('profile_id', $profile->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                foreach (self::DOCUMENT_KEYS as $key) {
+                    $statusField = $key.'_status';
+                    $remarksField = $key.'_remarks';
+                    $newStatus = $data[$statusField];
+                    $newRemarks = trim((string) ($data[$remarksField] ?? ''));
+                    $previousStatus = (string) ($previousVerification?->{$statusField} ?? 'pending');
+                    $previousRemarks = trim((string) ($previousVerification?->{$remarksField} ?? ''));
+
+                    if (
+                        $newStatus === 'rejected'
+                        && $newRemarks !== ''
+                        && ($previousStatus !== 'rejected' || $previousRemarks !== $newRemarks)
+                    ) {
+                        $rejectedDocuments[] = [
+                            'key' => $key,
+                            'label' => $this->documentLabel($key),
+                            'remark' => $newRemarks,
+                        ];
+                    }
+                }
+
                 DocumentVerification::updateOrCreate(['profile_id' => $profile->id], $data);
                 $profile->syncDocumentVerificationStatus();
+
+                $candidate = $profile->user;
+                if ($candidate && $rejectedDocuments) {
+                    $message = collect($rejectedDocuments)
+                        ->map(fn (array $document) => $document['label'].': '.$document['remark'])
+                        ->implode(' | ');
+
+                    CandidateNotification::create([
+                        'user_id' => $candidate->id,
+                        'type' => 'document_verification_rejected',
+                        'title' => 'Document verification needs attention',
+                        'message' => $message,
+                        'data' => [
+                            'profile_id' => $profile->id,
+                            'documents' => $rejectedDocuments,
+                        ],
+                    ]);
+                }
             });
 
             return response()->json([
@@ -1919,6 +1953,40 @@ class ProfileController extends Controller
         ], 403);
     }
 
+    private function presentProfileListItem(Profile $profile): array
+    {
+        $verificationSummary = $profile->verificationSummary();
+        $addresses = is_array($profile->addresses)
+            ? $profile->addresses
+            : (is_string($profile->addresses) && $profile->addresses ? json_decode($profile->addresses, true) : []);
+        if (! is_array($addresses)) {
+            $addresses = [];
+        }
+
+        $currentCountry = data_get($addresses, 'current.country');
+        $country = NriProfileScope::resolveCountry(
+            is_string($currentCountry) && trim($currentCountry) !== ''
+                ? $currentCountry
+                : ($addresses['country'] ?? null),
+            data_get($addresses, 'current.address')
+        );
+        $profilePhoto = $profile->profilePhotoWithFallback($profile->photoPath('profile_photo'));
+
+        return [
+            'id' => $profile->id,
+            'registration_number' => $profile->reg_id,
+            'full_name' => $profile->full_name,
+            'mobile' => $profile->user?->username ?? $profile->phone,
+            'photo_url' => $this->fileUrl($profilePhoto),
+            'registration_date' => optional($profile->created_at)->format('d-m-Y'),
+            'status' => $verificationSummary['display_status'],
+            'is_verified' => $verificationSummary['is_verified'],
+            'payment_verified' => $verificationSummary['payment_verified'],
+            'country' => $country,
+            'updated_by_user_id' => $profile->updated_by_user_id,
+        ];
+    }
+
     private function presentProfile(Profile $profile, bool $detailed = false, bool $includeEditor = false): array
     {
         $user = $profile->user;
@@ -1942,6 +2010,13 @@ class ProfileController extends Controller
             ?? $photoPaths[0]
             ?? null;
         $profilePhoto = $profile->profilePhotoWithFallback($profilePhoto);
+        $currentCountry = data_get($addresses, 'current.country');
+        $country = NriProfileScope::resolveCountry(
+            is_string($currentCountry) && trim($currentCountry) !== ''
+                ? $currentCountry
+                : ($addresses['country'] ?? null),
+            data_get($addresses, 'current.address')
+        );
 
         $normalizeList = function ($value) {
             if (is_array($value)) {
@@ -1983,6 +2058,7 @@ class ProfileController extends Controller
             'registration_is_profile' => $registrationSummary['is_profile'],
             'registration_is_melava' => $registrationSummary['is_melava'],
             'city' => $employment?->employment_city ?: $education?->education_city ?: ($addresses['city'] ?? null),
+            'country' => $country,
             'education' => $education?->degree_name ?: $education?->education_level,
             'profession' => $employment?->profession,
             'age' => $profile->birth_date ? Carbon::parse($profile->birth_date)->age : null,
@@ -2351,7 +2427,28 @@ class ProfileController extends Controller
         }
 
         $path = ltrim(str_replace('\\', '/', rawurldecode($path)), '/');
-        return preg_replace('#^storage/#i', '', $path);
+        $path = preg_replace('#^storage/#i', '', $path);
+
+        return preg_replace('#^uploads/profile_photos/#i', 'profile_photos/', $path);
+    }
+
+    private function removePhotoColumnReferences(Profile $profile, array $columns, array $removePhotoPaths): array
+    {
+        $removedPaths = [];
+
+        foreach (['profile_photo', 'profilePhoto', 'full_body_photo', 'half_body_photo', 'selfie_photo'] as $column) {
+            if (! in_array($column, $columns, true)) {
+                continue;
+            }
+
+            $path = $profile->getAttribute($column);
+            if (in_array($this->normalizePhotoPath($path), $removePhotoPaths, true)) {
+                $removedPaths[] = $path;
+                $profile->setAttribute($column, null);
+            }
+        }
+
+        return array_values(array_unique(array_filter($removedPaths)));
     }
 
     private function heightToCentimeters(?string $height): ?float
