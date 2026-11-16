@@ -13,6 +13,7 @@ class AllModulesAndAccessSeeder extends Seeder
             WebsiteManagementModuleSeeder::class,
             RbacSeeder::class,
             CandidateRoleAccessSeeder::class,
+            ChatModuleSeeder::class,
             SuperAdminSeeder::class,
         ]);
     }

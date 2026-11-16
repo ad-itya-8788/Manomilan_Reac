@@ -14,6 +14,7 @@ const DESKTOP_LINKS = [
   ["How It Works", "/how-it-works"],
   ["Success Stories", "/success-stories"],
   ["Our services", "/our-services"],
+  ["Help", "/help"],
   ["Contact us", "/contactus"],
 ];
 
@@ -23,6 +24,7 @@ const MOBILE_LINKS = [
   ["How It Works", "/how-it-works"],
   ["Success Stories", "/success-stories"],
   ["Our services", "/our-services"],
+  ["Help", "/help"],
   ["Contact us", "/contactus"],
 ];
 

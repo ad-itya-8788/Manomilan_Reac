@@ -9,6 +9,7 @@ import {
   Users,
   LogIn,
   ArrowRight,
+  CircleHelp,
   Home as HomeIcon,
 } from "lucide-react";
 import {
@@ -185,13 +186,24 @@ export default function Login() {
 
   return (
     <div className="login-page">
+      <a className="login-help-link" href="/help">
+        <CircleHelp size={17} />
+        Help
+      </a>
+
       <header className="login-mobile-header">
         <a className="login-mobile-brand" href="/" aria-label="Aaryans Mano-Milan home">
           <img src="/stories/Mano_Milan_Final_Website.png" alt="Aaryans Mano-Milan" />
         </a>
-        <a className="login-mobile-home" href="/" aria-label="Go to home">
-          <HomeIcon size={22} />
-        </a>
+        <div className="login-mobile-actions">
+          <a className="login-mobile-help" href="/help">
+            <CircleHelp size={18} />
+            Help
+          </a>
+          <a className="login-mobile-home" href="/" aria-label="Go to home">
+            <HomeIcon size={22} />
+          </a>
+        </div>
       </header>
 
       {/* ---------- Left hero panel ---------- */}
@@ -487,8 +499,8 @@ export default function Login() {
       </div>
 
       <footer className="login-mobile-footer">
-        <span>© {new Date().getFullYear()} Aaryans Mano-Milan</span>
-        <a href="/contactus">Need help? Contact us</a>
+        <span>Ac {new Date().getFullYear()} Aaryans Mano-Milan</span>
+        <a href="/help">Need help? Chat with us</a>
       </footer>
     </div>
   );

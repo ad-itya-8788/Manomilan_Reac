@@ -13,6 +13,7 @@ import {
   saveMelavaDraft,
   saveMelavaDraftAttachment,
 } from "./melavaRegistrationDraft";
+import { translateMelavaText } from "./melavaRegistrationTranslations.js";
 import "./MelavaRegistration.css";
 
 // NOTE: the PDF download uses jsPDF. Install once:  npm i jspdf
@@ -996,11 +997,26 @@ const downloadRegistrationPdf = async (data) => {
   doc.save(data.fileName || "melava-registration.pdf");
 };
 
-function FieldError({ message }) {
-  return message ? <small className="err">{message}</small> : null;
+function FieldError({ message, t }) {
+  return message ? <small className="err">{t(message)}</small> : null;
 }
 
 export default function MelavaRegistration() {
+  const [language, setLanguage] = useState("en");
+  const t = useCallback((text) => translateMelavaText(text, language), [language]);
+  const languageToggle = (
+    <div className="melava-language-bar">
+      <button
+        type="button"
+        className="melava-language-toggle"
+        onClick={() => setLanguage((current) => current === "mr" ? "en" : "mr")}
+        aria-label={t(language === "mr" ? "View in English" : "Translate to Marathi")}
+        aria-pressed={language === "mr"}
+      >
+        {t(language === "mr" ? "View in English" : "Translate to Marathi")}
+      </button>
+    </div>
+  );
   const adminEditId = new URLSearchParams(window.location.search).get("admin_edit") || "";
   const adminEditAuthorized = Boolean(adminEditId && isAdminRole(getSession()?.role));
   const adminEditAccessError = Boolean(
@@ -2623,7 +2639,7 @@ export default function MelavaRegistration() {
 
     return (
       <div className={`f w${field.w}`} key={field.n} data-field={field.n}>
-        <label>{field.l}{field.r ? <b>*</b> : null}</label>
+        <label>{t(field.l)}{field.r ? <b>*</b> : null}</label>
         <input
           id={field.id || bucket}
           type="file"
@@ -2639,38 +2655,38 @@ export default function MelavaRegistration() {
                 {item.file ? (
                   item.file.type.startsWith("image/") ? <img src={item.preview} alt="" /> : <span className="doc-name">{item.file.name}</span>
                 ) : ["profilePhoto", "full_body_photo", "half_body_photo", "selfie_photo", "candidatePhotos", "additionalPhotos"].includes(bucket) ? (
-                  <img src={apiMediaUrl(item.preview)} alt="Existing uploaded file" />
+                  <img src={apiMediaUrl(item.preview)} alt={t("Existing uploaded file")} />
                 ) : item.preview ? (
-                  <a className="doc-name" href={apiMediaUrl(item.preview)} target="_blank" rel="noreferrer">View uploaded document</a>
+                  <a className="doc-name" href={apiMediaUrl(item.preview)} target="_blank" rel="noreferrer">{t("View uploaded document")}</a>
                 ) : null}
               </span>
             ))}
-            <button type="button" className="mini" onClick={() => removeFile(field)}>Remove</button>
+            <button type="button" className="mini" onClick={() => removeFile(field)}>{t("Remove")}</button>
           </div>
         ) : null}
-        <FieldError message={errors[field.n]} />
+        <FieldError message={errors[field.n]} t={t} />
       </div>
     );
   };
 
   const renderField = (field) => {
-    if (field.sec) return <div className="sec" key={field.sec}>{field.sec}</div>;
+    if (field.sec) return <div className="sec" key={field.sec}>{t(field.sec)}</div>;
     if (!fieldVisible(field, form)) return null;
     if (field.t === "file") return renderFileField(field);
 
     const key = field.n;
     const id = field.id || key;
     const placeholder = field.p || PLACEHOLDERS[key] || "";
-    const label = <label htmlFor={id}>{field.l}{field.r ? <b>*</b> : null}</label>;
+    const label = <label htmlFor={id}>{t(field.l)}{field.r ? <b>*</b> : null}</label>;
 
     if (field.t === "height") {
       return (
         <div className="f w3" key={key} data-field="height">
-          <label>{field.l}<b>*</b></label>
+          <label>{t(field.l)}<b>*</b></label>
           <input
             type="number"
             name="height"
-            placeholder="e.g., 5"
+            placeholder={t("e.g., 5")}
             min="3"
             max="8"
             step="1"
@@ -2678,8 +2694,8 @@ export default function MelavaRegistration() {
             value={form.height}
             onChange={(event) => update("height", event.target.value.replace(/\D/g, "").slice(0, 1))}
           />
-          <small>Enter height in digits only</small>
-          <FieldError message={errors.height} />
+          <small>{t("Enter height in digits only")}</small>
+          <FieldError message={errors.height} t={t} />
         </div>
       );
     }
@@ -2687,23 +2703,23 @@ export default function MelavaRegistration() {
     if (field.t === "tob") {
       return (
         <div className="f w6" key={key} data-field="timeOfBirth">
-          <label>{field.l}<b>*</b></label>
+          <label>{t(field.l)}<b>*</b></label>
           <div className="r3">
-            <select aria-label="Hour" value={form.birth_hour} onChange={(event) => update("birth_hour", event.target.value)}>
-              <option value="">Hour</option>
+            <select aria-label={t("Hour")} value={form.birth_hour} onChange={(event) => update("birth_hour", event.target.value)}>
+              <option value="">{t("Hour")}</option>
               {range(1, 12, true).map((hour) => <option key={hour} value={hour}>{hour}</option>)}
             </select>
-            <select aria-label="Minute" value={form.birth_minute} onChange={(event) => update("birth_minute", event.target.value)}>
-              <option value="">Min</option>
+            <select aria-label={t("Minute")} value={form.birth_minute} onChange={(event) => update("birth_minute", event.target.value)}>
+              <option value="">{t("Min")}</option>
               {range(0, 59, true).map((minute) => <option key={minute} value={minute}>{minute}</option>)}
             </select>
-            <select aria-label="AM or PM" value={form.birthTime_ampm} onChange={(event) => update("birthTime_ampm", event.target.value)}>
+            <select aria-label={t("AM or PM")} value={form.birthTime_ampm} onChange={(event) => update("birthTime_ampm", event.target.value)}>
               <option value="AM">AM</option>
               <option value="PM">PM</option>
             </select>
           </div>
-          <small>{field.h}</small>
-          <FieldError message={errors.timeOfBirth} />
+          <small>{t(field.h)}</small>
+          <FieldError message={errors.timeOfBirth} t={t} />
         </div>
       );
     }
@@ -2713,10 +2729,10 @@ export default function MelavaRegistration() {
         <div className={`f w${field.w}`} key={key} data-field={key}>
           {label}
           <select id={id} name={key} value={form[key] ?? ""} onChange={(event) => update(key, event.target.value)} disabled={Boolean(field.sub && !form[field.sub])}>
-            <option value="">{field.sub && !form[field.sub] ? "Choose caste first" : "Choose one"}</option>
-            {optionList(field, form).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+            <option value="">{t(field.sub && !form[field.sub] ? "Choose caste first" : "Choose one")}</option>
+            {optionList(field, form).map(([value, text]) => <option key={value} value={value}>{t(text)}</option>)}
           </select>
-          <FieldError message={errors[key]} />
+          <FieldError message={errors[key]} t={t} />
         </div>
       );
     }
@@ -2729,16 +2745,16 @@ export default function MelavaRegistration() {
             <button
               type="button"
               className="mini address-copy same-current-address"
-              aria-label="Use current address as permanent address"
-              title="Use current address as permanent address"
+              aria-label={t("Use current address as permanent address")}
+              title={t("Use current address as permanent address")}
               onClick={() => update("permanent_address", form.address || "")}
             >
               <Copy size={16} aria-hidden="true" />
-              <span>Same as current address</span>
+              <span>{t("Same as current address")}</span>
             </button>
           ) : null}
-          <textarea id={id} name={key} rows="3" placeholder={placeholder} value={form[key] ?? ""} onChange={(event) => update(key, event.target.value)} />
-          <FieldError message={errors[key]} />
+          <textarea id={id} name={key} rows="3" placeholder={t(placeholder)} value={form[key] ?? ""} onChange={(event) => update(key, event.target.value)} />
+          <FieldError message={errors[key]} t={t} />
         </div>
       );
     }
@@ -2750,7 +2766,7 @@ export default function MelavaRegistration() {
           id={id}
           name={key}
           type={field.t}
-          placeholder={placeholder}
+          placeholder={t(placeholder)}
           value={form[key] ?? ""}
           readOnly={Boolean(field.ro)}
           maxLength={field.max}
@@ -2774,12 +2790,12 @@ export default function MelavaRegistration() {
         {key === "current_address_pincode" ? (
           <small aria-live="polite">
             {postalLookup.current.loading
-              ? "Looking up PIN code..."
-              : postalLookup.current.message}
+              ? t("Looking up PIN code...")
+              : t(postalLookup.current.message)}
           </small>
         ) : null}
-        {field.h ? <small>{field.h}</small> : null}
-        <FieldError message={errors[key]} />
+        {field.h ? <small>{t(field.h)}</small> : null}
+        <FieldError message={errors[key]} t={t} />
       </div>
     );
   };
@@ -2787,7 +2803,7 @@ export default function MelavaRegistration() {
   const renderPreviewValue = (field) => {
     if (field.t === "height") return heightText || "\u2014";
     if (field.t === "tob") return timeText ? `${form.birth_hour}:${form.birth_minute} ${form.birthTime_ampm}` : "\u2014";
-    if (field.t === "select") return form[field.n] ? optionLabel(field, form, form[field.n]) : "\u2014";
+    if (field.t === "select") return form[field.n] ? t(optionLabel(field, form, form[field.n])) : "\u2014";
     if (field.t === "file") {
       const items = fileItems(field);
       if (!items.length) return "\u2014";
@@ -2814,10 +2830,11 @@ export default function MelavaRegistration() {
     return (
       <main className="melava-page">
         <div className="wrap">
+          {languageToggle}
           <section className="card">
-            <h2>Unable to open registration</h2>
-            <p className="sub">A valid administrator session is required to edit this Melava registration.</p>
-            <a className="btn g" href="/admin/melava">Back to Melava registrations</a>
+            <h2>{t("Unable to open registration")}</h2>
+            <p className="sub">{t("A valid administrator session is required to edit this Melava registration.")}</p>
+            <a className="btn g" href="/admin/melava">{t("Back to Melava registrations")}</a>
           </section>
         </div>
       </main>
@@ -2827,7 +2844,10 @@ export default function MelavaRegistration() {
   if (adminEditLoading) {
     return (
       <main className="melava-page">
-        <div className="wrap"><section className="card">Loading registration details...</section></div>
+        <div className="wrap">
+          {languageToggle}
+          <section className="card">{t("Loading registration details...")}</section>
+        </div>
       </main>
     );
   }
@@ -2836,10 +2856,11 @@ export default function MelavaRegistration() {
     return (
       <main className="melava-page">
         <div className="wrap">
+          {languageToggle}
           <section className="card">
-            <h2>Unable to open registration</h2>
-            <p className="sub">{adminEditLoadError}</p>
-            <a className="btn g" href="/admin/melava">Back to Melava registrations</a>
+            <h2>{t("Unable to open registration")}</h2>
+            <p className="sub">{t(adminEditLoadError)}</p>
+            <a className="btn g" href="/admin/melava">{t("Back to Melava registrations")}</a>
           </section>
         </div>
       </main>
@@ -2849,7 +2870,10 @@ export default function MelavaRegistration() {
   if (campaignsLoading && !adminEditId) {
     return (
       <main className="melava-page">
-        <div className="wrap"><section className="card">Loading open Melava events...</section></div>
+        <div className="wrap">
+          {languageToggle}
+          <section className="card">{t("Loading open Melava events...")}</section>
+        </div>
       </main>
     );
   }
@@ -2859,8 +2883,9 @@ export default function MelavaRegistration() {
       <main className="melava-page">
         <div className="wrap">
           <section className="card">
-            <h2>{campaignsError ? "Unable to load events" : "No open Melava events"}</h2>
-            <p className="sub">{campaignsError || "Registration will appear here when the admin opens a Melava event."}</p>
+            {languageToggle}
+            <h2>{t(campaignsError ? "Unable to load events" : "No open Melava events")}</h2>
+            <p className="sub">{t(campaignsError || "Registration will appear here when the admin opens a Melava event.")}</p>
           </section>
         </div>
       </main>
@@ -2871,12 +2896,13 @@ export default function MelavaRegistration() {
     return (
       <main className="melava-page">
         <div className="wrap">
+          {languageToggle}
           <section className="card success-card">
             <span className="success-icon">{ICONS.check}</span>
-            <h1>Registration updated</h1>
-            <p className="sub">{result.message || "The Melava registration was updated successfully."}</p>
+            <h1>{t("Registration updated")}</h1>
+            <p className="sub">{t(result.message || "The Melava registration was updated successfully.")}</p>
             <div className="actions">
-              <a href="/admin/melava" className="btn p">Back to Melava registrations</a>
+              <a href="/admin/melava" className="btn p">{t("Back to Melava registrations")}</a>
             </div>
           </section>
         </div>
@@ -2889,48 +2915,49 @@ export default function MelavaRegistration() {
     return (
       <main className="melava-page">
         <div className="wrap">
+          {languageToggle}
           <div className="hero">
             <div className="hero-copy">
-              <h1>Registration Submitted</h1>
-              <p>Your Melava registration has been received. Payment is pending admin verification.</p>
+              <h1>{t("Registration Submitted")}</h1>
+              <p>{t("Your Melava registration has been received. Payment is pending admin verification.")}</p>
               <span className="must">{settings.batch_label}</span>
             </div>
           </div>
           <section className="card success-card">
             <span className="success-icon">{ICONS.check}</span>
-            <h2>{result.message || "You're registered for Melava!"}</h2>
+            <h2>{t(result.message || "You're registered for Melava!")}</h2>
             <div className="summary">
-              <div><span>Registration number</span><strong>{data.registration_number || "\u2014"}</strong></div>
-              <div><span>Melava serial number</span><strong>{data.serial_no || "Will be allotted"}</strong></div>
-              <div><span>Melava</span><strong>{data.melava_title || settings.batch_label}</strong></div>
-              <div><span>Booklet</span><strong>{data.is_booklet_req ? "Requested" : "Not requested"}</strong></div>
-              <div><span>Payment</span><strong>{data.payment_verified ? "Verified" : "Pending verification"}</strong></div>
+              <div><span>{t("Registration number")}</span><strong>{data.registration_number || "\u2014"}</strong></div>
+              <div><span>{t("Melava serial number")}</span><strong>{data.serial_no || t("Will be allotted")}</strong></div>
+              <div><span>{t("Melava")}</span><strong>{data.melava_title || settings.batch_label}</strong></div>
+              <div><span>{t("Booklet")}</span><strong>{t(data.is_booklet_req ? "Requested" : "Not requested")}</strong></div>
+              <div><span>{t("Payment")}</span><strong>{t(data.payment_verified ? "Verified" : "Pending verification")}</strong></div>
             </div>
             {pdfData ? (
               <div className={`al ${pdfError ? "er" : "ok"}`}>
-                {pdfError || `${ICONS.pdf} Your filled form is ready to download as a PDF.`}
+                {t(pdfError || `${ICONS.pdf} Your filled form is ready to download as a PDF.`)}
               </div>
             ) : null}
-            {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{draftStatusMessage}</p> : null}
+            {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{t(draftStatusMessage)}</p> : null}
             {result.credentials ? (
               <div className="al ok">
-                <b>Your login is ready.</b>
+                <b>{t("Your login is ready.")}</b>
                 <p>
-                  Use your mobile number <b>{result.credentials.username}</b> and the temporary password{" "}
-                  <b>{result.credentials.password}</b> to sign in. Please change the password after your first login.
+                  {t("Use your mobile number ")}<b>{result.credentials.username}</b>{t(" and the temporary password ")}
+                  <b>{result.credentials.password}</b>{t(" to sign in. Please change the password after your first login.")}
                 </p>
               </div>
             ) : (
-              <div className="al ok">Your existing website account has been linked to this Melava registration.</div>
+              <div className="al ok">{t("Your existing website account has been linked to this Melava registration.")}</div>
             )}
             <div className="actions">
-              <Link to="/login" className="btn p">Go to login</Link>
+              <Link to="/login" className="btn p">{t("Go to login")}</Link>
               {pdfData ? (
                 <button type="button" className="btn g" disabled={pdfDownloading} onClick={() => downloadCurrentPdf(pdfData)}>
-                  {pdfDownloading ? "Preparing PDF..." : `${ICONS.pdf} Download PDF`}
+                  {pdfDownloading ? t("Preparing PDF...") : `${ICONS.pdf} ${t("Download PDF")}`}
                 </button>
               ) : null}
-              <button type="button" className="btn g" onClick={resetAll}>Register another candidate</button>
+              <button type="button" className="btn g" onClick={resetAll}>{t("Register another candidate")}</button>
             </div>
           </section>
         </div>
@@ -2942,64 +2969,65 @@ export default function MelavaRegistration() {
     return (
       <main className="melava-page">
         <div className="wrap">
+          {languageToggle}
           <div className="hero compact">
             <div className="hero-copy">
-              <h1>Complete Your Payment</h1>
-              <p>Scan the QR code, pay the registration fee, then upload the payment screenshot.</p>
+              <h1>{t("Complete Your Payment")}</h1>
+              <p>{t("Scan the QR code, pay the registration fee, then upload the payment screenshot.")}</p>
               <span className="must">{settings.batch_label}</span>
             </div>
           </div>
-          {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{draftStatusMessage}</p> : null}
+          {draftStatusMessage ? <p className="sub" role="status" aria-live="polite">{t(draftStatusMessage)}</p> : null}
 
           <section className="card pay-card">
-            <h2>Payment Details</h2>
-            <p className="sub">Your registration will be saved with payment pending admin verification.</p>
+            <h2>{t("Payment Details")}</h2>
+            <p className="sub">{t("Your registration will be saved with payment pending admin verification.")}</p>
 
             <div className="pay-grid">
               <div className="fee-box">
-                <div className="fee-row"><span>Registration fee</span><strong>{money(settings.fee, settings.currency)}</strong></div>
+                <div className="fee-row"><span>{t("Registration fee")}</span><strong>{money(settings.fee, settings.currency)}</strong></div>
                 {form.booklet_required ? (
-                  <div className="fee-row"><span>Melava booklet</span><strong>{money(settings.booklet_fee, settings.currency)}</strong></div>
+                  <div className="fee-row"><span>{t("Melava booklet")}</span><strong>{money(settings.booklet_fee, settings.currency)}</strong></div>
                 ) : null}
-                <div className="fee-row total"><span>Total payable</span><strong>{money(total, settings.currency)}</strong></div>
-                <small>Booklet: {form.booklet_required ? "Requested" : "Not requested"}</small>
+                <div className="fee-row total"><span>{t("Total payable")}</span><strong>{money(total, settings.currency)}</strong></div>
+                <small>{t("Booklet")}: {t(form.booklet_required ? "Requested" : "Not requested")}</small>
               </div>
               <div className="qr-box">
-                {settings.qr_image_url ? <img src={apiMediaUrl(settings.qr_image_url)} alt="Payment QR code" /> : <div className="qr-empty">QR code unavailable</div>}
-                <small>Scan with any UPI app</small>
+                {settings.qr_image_url ? <img src={apiMediaUrl(settings.qr_image_url)} alt={t("Payment QR code")} /> : <div className="qr-empty">{t("QR code unavailable")}</div>}
+                <small>{t("Scan with any UPI app")}</small>
               </div>
             </div>
 
             {currentRegistration?.payment_screenshot_url ? (
               <div className="payment-record">
-                <strong>Previously submitted payment</strong>
-                <span>Status: {currentRegistration.payment_verified ? "Verified" : "Pending verification"}</span>
-                <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">View payment screenshot</a>
-                {!paymentFile?.file ? <span>You can continue with this saved payment, or upload a replacement screenshot.</span> : null}
+                <strong>{t("Previously submitted payment")}</strong>
+                <span>{t("Status:")} {t(currentRegistration.payment_verified ? "Verified" : "Pending verification")}</span>
+                <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">{t("View payment screenshot")}</a>
+                {!paymentFile?.file ? <span>{t("You can continue with this saved payment, or upload a replacement screenshot.")}</span> : null}
               </div>
             ) : null}
 
             <div className="f screenshot-field">
-              <label htmlFor="payment-screenshot">{currentRegistration?.payment_screenshot_url ? "Replace payment screenshot (optional)" : "Payment screenshot"} {!currentRegistration?.payment_screenshot_url ? <b>*</b> : null}</label>
+              <label htmlFor="payment-screenshot">{t(currentRegistration?.payment_screenshot_url ? "Replace payment screenshot (optional)" : "Payment screenshot")} {!currentRegistration?.payment_screenshot_url ? <b>*</b> : null}</label>
               <input id="payment-screenshot" type="file" accept="image/*,.pdf" onChange={handlePaymentFile} />
-              <small>Upload a clear screenshot or PDF of your payment, max 5 MB.</small>
+              <small>{t("Upload a clear screenshot or PDF of your payment, max 5 MB.")}</small>
               {paymentFile ? (
                 <div className="ph">
                   {paymentFile.file.type.startsWith("image/") ? <img src={paymentFile.preview} alt="" /> : <span className="doc-name">{paymentFile.file.name}</span>}
-                  <button type="button" className="mini" onClick={removePaymentFile}>Remove</button>
+                  <button type="button" className="mini" onClick={removePaymentFile}>{t("Remove")}</button>
                 </div>
               ) : null}
-              {paymentError ? <div className="al er">{paymentError}</div> : null}
+              {paymentError ? <div className="al er">{t(paymentError)}</div> : null}
             </div>
 
-            {submitError ? <div className="al er">{submitError}</div> : null}
+            {submitError ? <div className="al er">{t(submitError)}</div> : null}
 
             <div className="nav">
               <button type="button" className="btn g" disabled={submitting} onClick={() => { setStage("form"); setStep(PREVIEW_STEP); scrollTop(); }}>
-                {ICONS.back} Back
+                {ICONS.back} {t("Back")}
               </button>
               <button type="button" className="btn p" disabled={submitting} onClick={submitPayment}>
-                {submitting ? "Submitting..." : "Submit Payment"}
+                {submitting ? t("Submitting...") : t("Submit Payment")}
               </button>
             </div>
           </section>
@@ -3016,11 +3044,12 @@ export default function MelavaRegistration() {
   return (
     <main className="melava-page">
       <div className="wrap">
+        {languageToggle}
         <div className="hero">
           <img className="hero-logo" src="/website/Mano_Milan_Final_Website.png" alt="Aaryans Manomilan" />
           <div className="hero-copy">
-            <h1>{adminEditId ? "Edit Melava Registration" : "Registration For Melava"}</h1>
-            <p>{adminEditId ? "Update the candidate details and save the existing registration." : "Fill the form step by step. You can go Back anytime."}</p>
+            <h1>{t(adminEditId ? "Edit Melava Registration" : "Registration For Melava")}</h1>
+            <p>{t(adminEditId ? "Update the candidate details and save the existing registration." : "Fill the form step by step. You can go Back anytime.")}</p>
 
           </div>
           {!adminEditId && settings.qr_image_url ? <img className="hero-qr" src={apiMediaUrl(settings.qr_image_url)} alt="Melava payment QR" /> : null}
@@ -3034,11 +3063,11 @@ export default function MelavaRegistration() {
           <div className="campaign-details">
             <div className="campaign-title-row">
               <div className="campaign-title">
-                <span className="campaign-eyebrow">{adminEditId ? "Registration event" : "Upcoming event"}</span>
+                <span className="campaign-eyebrow">{t(adminEditId ? "Registration event" : "Upcoming event")}</span>
                 {!adminEditId && campaigns.length > 1 ? (
                   <label className="campaign-select-label" htmlFor="melava-campaign">
                     <select id="melava-campaign" value={selectedCampaignId} onChange={(event) => selectCampaign(event.target.value)}>
-                      <option value="">Select a Melava</option>
+                      <option value="">{t("Select a Melava")}</option>
                       {campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.melava_code ? `${campaign.melava_code} - ` : ""}{campaign.title}</option>)}
                     </select>
                   </label>
@@ -3046,15 +3075,15 @@ export default function MelavaRegistration() {
                   <h2>{settings.batch_label}</h2>
                 )}
               </div>
-              <span className="campaign-status"><i />{adminEditId ? "Editing registration" : "Registration Open"}</span>
+              <span className="campaign-status"><i />{t(adminEditId ? "Editing registration" : "Registration Open")}</span>
             </div>
             {selectedCampaign?.description ? <p className="campaign-description">{selectedCampaign.description}</p> : null}
             <div className="campaign-price">
-              <span>Registration <strong>{money(settings.fee, settings.currency)}</strong></span>
+              <span>{t("Registration")} <strong>{money(settings.fee, settings.currency)}</strong></span>
               {settings.booklet_available ? (
-                <span>Booklet <strong>{money(settings.booklet_fee, settings.currency)}</strong></span>
+                <span>{t("Booklet")} <strong>{money(settings.booklet_fee, settings.currency)}</strong></span>
               ) : (
-                <span>Booklet not available</span>
+                <span>{t("Booklet not available")}</span>
               )}
             </div>
           </div>
@@ -3069,7 +3098,7 @@ export default function MelavaRegistration() {
               onClick={() => jumpToStep(index)}
             >
               <i>{item.i}</i>
-              {index + 1}. {item.t}
+              {index + 1}. {t(item.t)}
             </button>
           ))}
           <button
@@ -3078,25 +3107,24 @@ export default function MelavaRegistration() {
             onClick={() => jumpToStep(PREVIEW_STEP)}
           >
             <i>{ICONS.eye}</i>
-            {TOTAL_STEPS}. Preview
+            {TOTAL_STEPS}. {t("Preview")}
           </button>
         </div>
         <div className="bar"><b style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }} /></div>
 
         {step === 0 && !adminEditId ? (
           <section className="card search">
-            <h2>{ICONS.search} Start here: Search your mobile number</h2>
+            <h2>{ICONS.search} {t("Start here: Search your mobile number")}</h2>
             <p className="sub">
-              If you already have a profile on our website, your details will be filled automatically.
-              New candidates can search and continue.
+              {t("If you already have a profile on our website, your details will be filled automatically. New candidates can search and continue.")}
             </p>
             <div className="srow" data-field="username">
               <input
                 type="tel"
                 maxLength={10}
                 inputMode="numeric"
-                placeholder="Enter 10-digit mobile number"
-                aria-label="Mobile number"
+                placeholder={t("Enter 10-digit mobile number")}
+                aria-label={t("Mobile Number")}
                 value={form.username}
                 disabled={draftRestoring}
                 onChange={(event) => {
@@ -3114,16 +3142,16 @@ export default function MelavaRegistration() {
                 }}
               />
               <button type="button" className="btn p" onClick={() => findCandidate()} disabled={draftRestoring}>
-                {lookup.status === "loading" ? "Fetching..." : "Fetch / Search Details"}
+                {lookup.status === "loading" ? t("Fetching...") : t("Fetch / Search Details")}
               </button>
             </div>
-            {errors.username ? <div className="al er">{errors.username}</div> : null}
-            {lookup.message ? <div className={`al ${lookup.tone || "ok"}`}>{lookup.message}</div> : null}
+            {errors.username ? <div className="al er">{t(errors.username)}</div> : null}
+            {lookup.message ? <div className={`al ${lookup.tone || "ok"}`}>{t(lookup.message)}</div> : null}
             {currentRegistration ? (
               <div className="payment-record">
-                <strong>Payment details for this Melava</strong>
+                <strong>{t("Payment details for this Melava")}</strong>
                 <span>
-                  Status: {currentRegistration.payment_verified ? "Verified" : currentRegistration.payment_screenshot_url ? "Submitted, pending verification" : "Not submitted"}
+                  {t("Status:")} {t(currentRegistration.payment_verified ? "Verified" : currentRegistration.payment_screenshot_url ? "Submitted, pending verification" : "Not submitted")}
                 </span>
                 <span>
                   Amount: {money(
@@ -3133,15 +3161,15 @@ export default function MelavaRegistration() {
                     currentRegistration.currency || settings.currency,
                   )}
                 </span>
-                <span>Booklet: {currentRegistration.is_booklet_req ? "Requested" : "Not requested"}</span>
+                <span>{t("Booklet")}: {t(currentRegistration.is_booklet_req ? "Requested" : "Not requested")}</span>
                 {currentRegistration.payment_screenshot_url ? (
-                  <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">View payment screenshot</a>
+                  <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">{t("View payment screenshot")}</a>
                 ) : null}
               </div>
             ) : null}
             {locked && !lookup.message ? (
               <div className="search-hint">
-                {ICONS.warning} Please search your mobile number first. The registration form will open after the search.
+                {ICONS.warning} {t("Please search your mobile number first. The registration form will open after the search.")}
               </div>
             ) : null}
           </section>
@@ -3149,10 +3177,10 @@ export default function MelavaRegistration() {
 
         {draftConflict ? (
           <div className="al ok" role="alert">
-            <p>The backend record and local draft have both changed. Choose which version to continue with.</p>
+            <p>{t("The backend record and local draft have both changed. Choose which version to continue with.")}</p>
             <div className="actions">
-              <button type="button" className="btn p" disabled={draftRestoring} onClick={() => resolveDraftConflict(true)}>Restore local draft</button>
-              <button type="button" className="btn g" disabled={draftRestoring} onClick={() => resolveDraftConflict(false)}>Use fetched data</button>
+              <button type="button" className="btn p" disabled={draftRestoring} onClick={() => resolveDraftConflict(true)}>{t("Restore local draft")}</button>
+              <button type="button" className="btn g" disabled={draftRestoring} onClick={() => resolveDraftConflict(false)}>{t("Use fetched data")}</button>
             </div>
           </div>
         ) : null}
@@ -3173,24 +3201,24 @@ export default function MelavaRegistration() {
         >
           {step < PREVIEW_STEP ? (
             <section className="card">
-              <h2>{STEPS[step].h}</h2>
-              <p className="sub">{STEPS[step].s}</p>
+              <h2>{t(STEPS[step].h)}</h2>
+              <p className="sub">{t(STEPS[step].s)}</p>
               <div className="grid">{STEPS[step].f.map(renderField)}</div>
               {STEPS[step].t === "Education & Work" && (
                 <div className="repeatable-sections">
-                  <h3>Education records</h3>
+                  <h3>{t("Education records")}</h3>
                   {educations.map((row, index) => (
                     <div className="grid" key={`education-${index}`}>
                       {Object.keys(EMPTY_EDUCATION).map((field) => (
                         <label className="repeatable-field" key={field}>
-                          <span>{field.replaceAll("_", " ")}</span>
+                          <span>{t(field.replaceAll("_", " "))}</span>
                           {field === "education_level" ? (
                             <select value={row[field]} onChange={(event) => {
                               markDraftDirty();
                               setEducations((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item));
                             }}>
-                              <option value="">Choose level</option>
-                              {EDUCATION_LEVEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                              <option value="">{t("Choose level")}</option>
+                              {EDUCATION_LEVEL_OPTIONS.map((option) => <option key={option} value={option}>{t(option)}</option>)}
                             </select>
                           ) : (
                             <input value={row[field]} onChange={(event) => {
@@ -3203,19 +3231,19 @@ export default function MelavaRegistration() {
                       {educations.length > 1 && <button type="button" onClick={() => {
                         markDraftDirty();
                         setEducations((items) => items.filter((_, itemIndex) => itemIndex !== index));
-                      }}>Remove education</button>}
+                      }}>{t("Remove education")}</button>}
                     </div>
                   ))}
                   <button type="button" onClick={() => {
                     markDraftDirty();
                     setEducations((items) => [...items, { ...EMPTY_EDUCATION }]);
-                  }}>Add education</button>
-                  <h3>Employment records</h3>
+                  }}>{t("Add education")}</button>
+                  <h3>{t("Employment records")}</h3>
                   {employments.map((row, index) => (
                     <div className="grid" key={`employment-${index}`}>
                       {Object.keys(EMPTY_EMPLOYMENT).map((field) => (
                         <label className="repeatable-field" key={field}>
-                          <span>{field.replaceAll("_", " ")}</span>
+                          <span>{t(field.replaceAll("_", " "))}</span>
                           <input value={row[field]} onChange={(event) => {
                             markDraftDirty();
                             setEmployments((items) => items.map((item, itemIndex) => itemIndex === index ? { ...item, [field]: event.target.value } : item));
@@ -3225,28 +3253,28 @@ export default function MelavaRegistration() {
                       {employments.length > 1 && <button type="button" onClick={() => {
                         markDraftDirty();
                         setEmployments((items) => items.filter((_, itemIndex) => itemIndex !== index));
-                      }}>Remove employment</button>}
+                      }}>{t("Remove employment")}</button>}
                     </div>
                   ))}
                   <button type="button" onClick={() => {
                     draftDirtyRef.current = true;
                     setEmployments((items) => [...items, { ...EMPTY_EMPLOYMENT }]);
-                  }}>Add employment</button>
+                  }}>{t("Add employment")}</button>
                 </div>
               )}
             </section>
           ) : (
             <section className="card">
-              <h2>{ICONS.eye} {adminEditId ? "Review registration changes" : "Preview your details"}</h2>
+              <h2>{ICONS.eye} {t(adminEditId ? "Review registration changes" : "Preview your details")}</h2>
               <p className="sub">
                 {adminEditId
-                  ? "Review the candidate details, edit any section, then save the existing registration."
-                  : "Please read everything carefully. Press Edit on any section to correct it, then continue to payment."}
+                  ? t("Review the candidate details, edit any section, then save the existing registration.")
+                  : t("Please read everything carefully. Press Edit on any section to correct it, then continue to payment.")}
               </p>
               <div className="note">
                 {adminEditId
-                  ? "Saving edits will keep the existing payment verification and payment record unchanged."
-                  : `${ICONS.warning} After you submit, you will not be able to change this form. Check names, mobile numbers and photos once more. A PDF copy of your form will download automatically after you submit.`}
+                  ? t("Saving edits will keep the existing payment verification and payment record unchanged.")
+                  : `${ICONS.warning} ${t("After you submit, you will not be able to change this form. Check names, mobile numbers and photos once more. A PDF copy of your form will download automatically after you submit.")}`}
               </div>
 
               {STEPS.map((item, index) => {
@@ -3254,13 +3282,13 @@ export default function MelavaRegistration() {
                 return (
                   <div className="pv" key={item.t}>
                     <header>
-                      <span>{item.h}</span>
-                      <button type="button" onClick={() => goToStep(index)}>{ICONS.edit} Edit</button>
+                      <span>{t(item.h)}</span>
+                      <button type="button" onClick={() => goToStep(index)}>{ICONS.edit} {t("Edit")}</button>
                     </header>
                     <dl>
                       {rows.map((field) => (
                         <div key={field.n}>
-                          <dt>{field.l.replace(/\s*\(.*?\)/g, "")}</dt>
+                          <dt>{t(field.l.replace(/\s*\(.*?\)/g, ""))}</dt>
                           <dd className={field.t === "textarea" || field.t === "file" ? "wide" : ""}>{renderPreviewValue(field)}</dd>
                         </div>
                       ))}
@@ -3272,17 +3300,17 @@ export default function MelavaRegistration() {
               {settings.booklet_available ? (
                 <div className="opt">
                   <div>
-                    <p>{ICONS.book} Do you want Melava Booklet?</p>
-                    <small>Booklet fee: {money(settings.booklet_fee, settings.currency)}</small>
+                    <p>{ICONS.book} {t("Do you want Melava Booklet?")}</p>
+                    <small>{t("Booklet fee:")} {money(settings.booklet_fee, settings.currency)}</small>
                   </div>
                   <div className="pills">
                     <label>
                       <input type="radio" name="booklet" checked={form.booklet_required} onChange={() => update("booklet_required", true)} />
-                      <span>Yes</span>
+                      <span>{t("Yes")}</span>
                     </label>
                     <label>
                       <input type="radio" name="booklet" checked={!form.booklet_required} onChange={() => update("booklet_required", false)} />
-                      <span>No</span>
+                      <span>{t("No")}</span>
                     </label>
                   </div>
                 </div>
@@ -3292,48 +3320,48 @@ export default function MelavaRegistration() {
                 <div className="legal">
                   <label>
                     <input type="checkbox" checked={form.disclaimer} onChange={(event) => update("disclaimer", event.target.checked)} />
-                    Disclaimer (optional)
+                    {t("Disclaimer (optional)")}
                   </label>
                   <ul>
-                    <li>We serve only as a platform to connect prospective brides and grooms. All interactions, verifications and decisions are the sole responsibility of the users.</li>
-                    <li>We do not guarantee the accuracy, suitability or authenticity of any profile. Please verify details independently.</li>
-                    <li>We are not liable for any loss, damage or disputes arising from use of this platform.</li>
-                    <li>Your personal information is kept confidential and not shared without your consent.</li>
-                    <li>By using this platform you agree to these terms, which may be updated at any time.</li>
+                    <li>{t("We serve only as a platform to connect prospective brides and grooms. All interactions, verifications and decisions are the sole responsibility of the users.")}</li>
+                    <li>{t("We do not guarantee the accuracy, suitability or authenticity of any profile. Please verify details independently.")}</li>
+                    <li>{t("We are not liable for any loss, damage or disputes arising from use of this platform.")}</li>
+                    <li>{t("Your personal information is kept confidential and not shared without your consent.")}</li>
+                    <li>{t("By using this platform you agree to these terms, which may be updated at any time.")}</li>
                   </ul>
                   <label data-field="privacyPolicyCheck">
                     <input type="checkbox" checked={form.privacyPolicyCheck} onChange={(event) => update("privacyPolicyCheck", event.target.checked)} />
-                    I accept the Privacy Policy
+                    {t("I accept the Privacy Policy")}
                   </label>
-                  {errors.privacyPolicyCheck ? <div className="al er">{errors.privacyPolicyCheck}</div> : null}
+                  {errors.privacyPolicyCheck ? <div className="al er">{t(errors.privacyPolicyCheck)}</div> : null}
                   <label data-field="termsCheck">
                     <input type="checkbox" checked={form.termsCheck} onChange={(event) => update("termsCheck", event.target.checked)} />
-                    I accept the Terms and Conditions
+                    {t("I accept the Terms and Conditions")}
                   </label>
-                  {errors.termsCheck ? <div className="al er">{errors.termsCheck}</div> : null}
-                  <small>Tick both boxes to continue to payment.</small>
+                  {errors.termsCheck ? <div className="al er">{t(errors.termsCheck)}</div> : null}
+                  <small>{t("Tick both boxes to continue to payment.")}</small>
                 </div>
               ) : null}
 
               <div className="fee-preview">
-                <span>Total payable</span>
+                <span>{t("Total payable")}</span>
                 <strong>{money(total, settings.currency)}</strong>
               </div>
               {currentRegistration ? (
                 <div className={`payment-record ${currentRegistration.payment_verified ? "verified" : ""}`}>
-                  <strong>Existing payment for this Melava</strong>
-                  <span>Status: {currentRegistration.payment_verified ? "Verified" : currentRegistration.payment_screenshot_url ? "Submitted, pending verification" : "Not submitted"}</span>
+                  <strong>{t("Existing payment for this Melava")}</strong>
+                  <span>{t("Status:")} {t(currentRegistration.payment_verified ? "Verified" : currentRegistration.payment_screenshot_url ? "Submitted, pending verification" : "Not submitted")}</span>
                   {currentRegistration.payment_screenshot_url ? (
-                    <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">View payment screenshot</a>
+                    <a href={currentRegistration.payment_screenshot_url} target="_blank" rel="noreferrer">{t("View payment screenshot")}</a>
                   ) : null}
                 </div>
               ) : null}
               {!adminEditId ? (
                 <div className="pdf-download">
                   <button type="button" className="btn g" onClick={() => downloadCurrentPdf()} disabled={pdfDownloading}>
-                    {pdfDownloading ? "Preparing PDF..." : `${ICONS.pdf} Download form as PDF`}
+                    {pdfDownloading ? t("Preparing PDF...") : `${ICONS.pdf} ${t("Download form as PDF")}`}
                   </button>
-                  {pdfError ? <div className="al er">{pdfError}</div> : null}
+                  {pdfError ? <div className="al er">{t(pdfError)}</div> : null}
                 </div>
               ) : null}
             </section>
@@ -3341,11 +3369,11 @@ export default function MelavaRegistration() {
 
           <div className="nav">
             <button type="button" className="btn g" onClick={goBack} disabled={step === 0}>
-              {ICONS.back} Back
+              {ICONS.back} {t("Back")}
             </button>
             {step < PREVIEW_STEP ? (
               <button type="button" className="btn p" onClick={goNext}>
-                {step === PREVIEW_STEP - 1 ? "Preview" : "Next"} {ICONS.next}
+                {t(step === PREVIEW_STEP - 1 ? "Preview" : "Next")} {ICONS.next}
               </button>
             ) : (
               <button
@@ -3353,7 +3381,7 @@ export default function MelavaRegistration() {
                 className="btn p"
                 disabled={submitting || (!adminEditId && paidRegistration)}
               >
-                {submitting ? "Saving..." : adminEditId ? "Save Changes" : paidRegistration ? "Payment Already Verified" : "Continue to Payment"} {paidRegistration ? "" : ICONS.next}
+                {t(submitting ? "Saving..." : adminEditId ? "Save Changes" : paidRegistration ? "Payment Already Verified" : "Continue to Payment")} {paidRegistration ? "" : ICONS.next}
               </button>
             )}
           </div>

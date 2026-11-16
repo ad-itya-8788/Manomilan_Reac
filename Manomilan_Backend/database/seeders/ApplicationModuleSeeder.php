@@ -64,15 +64,20 @@ class ApplicationModuleSeeder extends Seeder
             'description' => 'Search, preview, print and download candidate ID cards and Bio Data.',
             'route' => '/admin/id-printer',
             'frontend_routes' => ['/admin/id-printer', '/admin/id-cards'],
-            'api_prefixes' => ['/id-cards'],
+            'api_prefixes' => ['/id-cards', '/id-cards/candidates', '/id-cards/campaigns'],
             'icon' => 'id-card',
         ],
         'ID Generation' => [
             'key' => 'id_card_generation',
-            'description' => 'Super Admin-only ID generation and card design.',
+            'description' => 'Generate unique candidate IDs for selected Melava registrations.',
             'route' => '/admin/id-generation',
             'frontend_routes' => ['/admin/id-generation'],
-            'api_prefixes' => ['/id-cards/assignment/preview', '/id-cards/assign'],
+            'api_prefixes' => [
+                '/id-cards/assignment/preview',
+                '/id-cards/assign',
+                '/id-cards/candidates',
+                '/id-cards/campaigns',
+            ],
             'icon' => 'id-card',
         ],
         'Website Registration' => [
@@ -158,60 +163,27 @@ class ApplicationModuleSeeder extends Seeder
         }
 
         foreach (self::MODULES as $moduleName => $configuration) {
-            if (in_array($configuration['key'], [
-                'software_ticket_module',
-                'website_registration',
-                'id_cards',
-                'id_card_generation',
-            ], true)) {
-                $module = Module::query()->where('module_key', $configuration['key'])->first()
-                    ?? Module::query()
-                        ->where('application_id', $application->id)
-                        ->where('module_name', $moduleName)
-                        ->first()
-                    ?? new Module();
+            $module = Module::query()->where('module_key', $configuration['key'])->first()
+                ?? Module::query()
+                    ->where('application_id', $application->id)
+                    ->where('module_name', $moduleName)
+                    ->first()
+                ?? new Module();
 
-                $module->fill([
-                    'application_id' => $application->id,
-                    'module_name' => $moduleName,
-                    'module_key' => $configuration['key'],
-                    'description' => $configuration['description'],
-                    'status' => true,
-                    'route' => $configuration['route'],
-                    'frontend_routes' => $configuration['frontend_routes'],
-                    'api_prefixes' => $configuration['api_prefixes'],
-                    'icon' => $configuration['icon'],
-                ])->save();
-
-                continue;
+            if (! $module->exists) {
+                $module->status = true;
             }
 
-            $module = Module::query()->firstOrCreate(
-                [
-                    'application_id' => $application->id,
-                    'module_name' => $moduleName,
-                ],
-                [
-                    'module_key' => $configuration['key'],
-                    'description' => $configuration['description'],
-                    'status' => true,
-                    'route' => $configuration['route'] ?? null,
-                    'frontend_routes' => $configuration['frontend_routes'] ?? null,
-                    'api_prefixes' => $configuration['api_prefixes'] ?? null,
-                    'icon' => $configuration['icon'] ?? null,
-                ]
-            );
-
-            if (! $module->module_key) {
-                $module->module_key = $configuration['key'];
-                $module->save();
-            }
-
-            if ($moduleName === 'Website Registration') {
-                $module->frontend_routes = $configuration['frontend_routes'];
-                $module->api_prefixes = $configuration['api_prefixes'];
-                $module->save();
-            }
+            $module->fill([
+                'application_id' => $application->id,
+                'module_name' => $moduleName,
+                'module_key' => $configuration['key'],
+                'description' => $configuration['description'],
+                'route' => $configuration['route'] ?? null,
+                'frontend_routes' => $configuration['frontend_routes'] ?? null,
+                'api_prefixes' => $configuration['api_prefixes'] ?? null,
+                'icon' => $configuration['icon'] ?? null,
+            ])->save();
         }
     }
 }

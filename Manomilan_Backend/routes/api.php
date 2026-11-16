@@ -31,6 +31,8 @@ use App\Http\Controllers\Api\SuccessStoryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+require __DIR__.'/../app/Chat/Routes/api.php';
+
 Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:5,1');
 
 Route::get('/website/settings', [WebsiteManagementController::class, 'publicSettings']);
@@ -198,13 +200,12 @@ Route::prefix('admin/success-stories')->group(function () {
     Route::put('/melava-campaigns/{id}/status', [MelavaCampaignController::class, 'updateStatus']);
 
     Route::prefix('id-cards')->group(function () {
+        Route::get('/campaigns', [IdCardController::class, 'campaigns']);
         Route::get('/candidates', [IdCardController::class, 'candidates']);
         Route::get('/all-candidates', [IdCardController::class, 'allCandidates']);
         Route::get('/cards', [IdCardController::class, 'cards']);
-        Route::middleware('superadmin')->group(function () {
-            Route::get('/assignment/preview', [IdCardController::class, 'previewAssignment']);
-            Route::post('/assign', [IdCardController::class, 'assign']);
-        });
+        Route::get('/assignment/preview', [IdCardController::class, 'previewAssignment']);
+        Route::post('/assign', [IdCardController::class, 'assign']);
         Route::get('/design', [IdCardController::class, 'showDesign']);
         Route::put('/design', [IdCardController::class, 'saveDesign']);
         Route::put('/design/reset', [IdCardController::class, 'resetDesign']);

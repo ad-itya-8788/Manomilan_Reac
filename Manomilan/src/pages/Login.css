@@ -26,6 +26,31 @@
     linear-gradient(180deg, #fff3f7 0%, #fde1ea 55%, #f9c3d4 100%);
 }
 
+.login-help-link {
+  position: absolute;
+  top: 24px;
+  right: clamp(16px, 5vw, 80px);
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid rgba(196, 20, 79, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--crimson);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 20px rgba(196, 20, 79, 0.12);
+}
+
+.login-help-link:hover {
+  background: #fff;
+  border-color: var(--pink-500);
+}
+
 /* ---------- Hero (left) ---------- */
 .login-hero {
   position: relative;
@@ -584,6 +609,31 @@
     height: 100%;
     object-fit: cover;
     object-position: center 30%;
+  }
+
+  .login-help-link {
+    display: none;
+  }
+
+  .login-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .login-mobile-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 40px;
+    padding: 0 13px;
+    border: 1px solid #edc8d6;
+    border-radius: 12px;
+    background: #fff;
+    color: var(--crimson);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
   }
 
   .login-mobile-home {

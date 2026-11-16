@@ -18,6 +18,7 @@ class WebsiteSetting extends Model
         'upcoming_events_url',
         'upcoming_events_open_new_tab',
         'upcoming_events_images',
+        'chat_settings',
     ];
 
     protected function casts(): array
@@ -26,6 +27,7 @@ class WebsiteSetting extends Model
             'upcoming_events_enabled' => 'boolean',
             'upcoming_events_open_new_tab' => 'boolean',
             'upcoming_events_images' => 'array',
+            'chat_settings' => 'array',
         ];
     }
 }

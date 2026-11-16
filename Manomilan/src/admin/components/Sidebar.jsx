@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   BadgeCheck,
   CalendarHeart,
@@ -13,6 +13,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Printer,
   Settings,
   ShieldAlert,
@@ -23,6 +24,7 @@ import {
 import { Link } from "react-router-dom";
 import { clearSession } from "../../auth";
 import { AdminPermissionContext, hasModulePermission } from "../../permission-context.jsx";
+import { getAdminChatUnread } from "../../Chat/Services/chatApi";
 import { menuItems } from "../data/adminData";
 import WebsiteSidebarGroup from "./WebsiteSidebarGroup";
 
@@ -33,6 +35,7 @@ const SYSTEM_MANAGEMENT = {
 
 const ICONS = {
   "/admin": LayoutDashboard,
+  "/admin/chat": MessageCircle,
   "/admin/success-stories": HeartHandshake,
   "/admin/profiles": Users,
   "/admin/nri-profiles": Globe,
@@ -55,6 +58,7 @@ const ICONS = {
 
 const ICON_COLORS = {
   "/admin": "#2f80ed",
+  "/admin/chat": "#7c3aed",
   "/admin/success-stories": "#e11d48",
   "/admin/profiles": "#8b5cf6",
   "/admin/nri-profiles": "#14b8a6",
@@ -77,6 +81,29 @@ const ICON_COLORS = {
 
 export default function Sidebar({ currentPath, onNavigate }) {
   const access = useContext(AdminPermissionContext);
+  const canViewChat = hasModulePermission(access, "view", "/admin/chat", "chat_support");
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  useEffect(() => {
+    if (!canViewChat) return undefined;
+    let active = true;
+    const loadUnread = () => {
+      getAdminChatUnread()
+        .then((data) => {
+          if (active) setUnreadChatCount(Number(data?.unread_count) || 0);
+        })
+        .catch(() => {});
+    };
+    loadUnread();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") loadUnread();
+    }, 20000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [canViewChat]);
+
   const items = [...menuItems, SYSTEM_MANAGEMENT];
   const visibleItems = items.filter((item) =>
     (!item.requiresSuperAdmin || access?.is_super_admin)
@@ -112,6 +139,9 @@ export default function Sidebar({ currentPath, onNavigate }) {
                 <Icon size={20} strokeWidth={2.2} />
               </span>
               <span className="adm-link-text">{item.label}</span>
+              {item.path === "/admin/chat" && canViewChat && unreadChatCount > 0 ? (
+                <span className="adm-nav-badge">{unreadChatCount > 99 ? "99+" : unreadChatCount}</span>
+              ) : null}
             </Link>
           );
         })}

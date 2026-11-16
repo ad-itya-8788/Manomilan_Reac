@@ -41,7 +41,9 @@ export default function AdminLayout({ currentPath, contentClassName = "", childr
   useEffect(() => {
     try {
       localStorage.setItem(SIDEBAR_WIDTH_KEY, collapsed ? "1" : "0");
-    } catch {}
+    } catch {
+      /* ignore storage access errors */
+    }
   }, [collapsed]);
 
   const handleLogout = () => {

@@ -81,6 +81,21 @@ class IdCardController extends Controller
         ]);
     }
 
+    public function campaigns(Request $request)
+    {
+        if (! $this->isAdmin($request)) {
+            return $this->forbidden();
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => DB::table('melava_campaigns')
+                ->select(['id', 'melava_code', 'title', 'status'])
+                ->orderByDesc('id')
+                ->get(),
+        ]);
+    }
+
     public function allCandidates(Request $request)
     {
         if (! $this->isAdmin($request)) {
@@ -173,7 +188,12 @@ class IdCardController extends Controller
         }
 
         $data = $this->validateAssignment($request);
-        $rows = $this->assignmentQuery($data['age_min'], $data['age_max'], $data['marital_status'])
+        $rows = $this->assignmentQuery(
+            $data['age_min'],
+            $data['age_max'],
+            $data['marital_status'],
+            $data['campaign_id']
+        )
             ->orderBy('pmr.id')
             ->get();
 
@@ -185,6 +205,7 @@ class IdCardController extends Controller
                 $data['age_max'],
                 $rows,
                 $data['marital_status'],
+                $data['campaign_id'],
             ),
         ]);
     }
@@ -209,7 +230,12 @@ class IdCardController extends Controller
             $lockAcquired = true;
 
             $result = DB::transaction(function () use ($data, $request) {
-                $rows = $this->assignmentQuery($data['age_min'], $data['age_max'], $data['marital_status'])
+                $rows = $this->assignmentQuery(
+                    $data['age_min'],
+                    $data['age_max'],
+                    $data['marital_status'],
+                    $data['campaign_id']
+                )
                     ->orderBy('pmr.id')
                     ->lockForUpdate()
                     ->get();
@@ -220,6 +246,7 @@ class IdCardController extends Controller
                     $data['age_max'],
                     $rows,
                     $data['marital_status'],
+                    $data['campaign_id'],
                 );
 
                 if ($preview['overwrite_count'] > 0 && ! $data['overwrite_existing']) {
@@ -269,6 +296,7 @@ class IdCardController extends Controller
                     'prefix' => $preview['prefix'],
                     'age_min' => $preview['age_min'],
                     'age_max' => $preview['age_max'],
+                    'campaign_id' => $preview['campaign_id'],
                     'marital_status' => $preview['marital_status'],
                     'matched_count' => $preview['total'],
                     'assigned_count' => $preview['total'],
@@ -465,6 +493,7 @@ class IdCardController extends Controller
             'prefix' => ['required', 'string', 'max:40'],
             'age_min' => ['required', 'integer', 'min:1', 'max:120'],
             'age_max' => ['required', 'integer', 'min:1', 'max:120'],
+            'campaign_id' => ['nullable', 'integer', 'exists:melava_campaigns,id'],
             'marital_status' => ['nullable', Rule::in(['Unmarried', 'Divorced', 'Widowed', 'Separated'])],
             'overwrite_existing' => ['nullable', 'boolean'],
         ]);
@@ -488,6 +517,7 @@ class IdCardController extends Controller
             'prefix' => $prefix,
             'age_min' => (int) $data['age_min'],
             'age_max' => (int) $data['age_max'],
+            'campaign_id' => isset($data['campaign_id']) ? (int) $data['campaign_id'] : null,
             'marital_status' => $data['marital_status'] ?? null,
             'overwrite_existing' => $request->boolean('overwrite_existing'),
         ];
@@ -652,7 +682,12 @@ class IdCardController extends Controller
         return $query;
     }
 
-    private function assignmentQuery(int $ageMin, int $ageMax, ?string $maritalStatus = null)
+    private function assignmentQuery(
+        int $ageMin,
+        int $ageMax,
+        ?string $maritalStatus = null,
+        ?int $campaignId = null
+    )
     {
         $query = DB::table('profile_melava_registrations as pmr')
             ->join('profiles as p', 'p.id', '=', 'pmr.profile_id')
@@ -672,6 +707,9 @@ class IdCardController extends Controller
         if ($maritalStatus !== null && $maritalStatus !== '') {
             $query->whereRaw('LOWER(TRIM(p.marital_status)) = ?', [strtolower(trim($maritalStatus))]);
         }
+        if ($campaignId !== null) {
+            $query->where('pmr.melava_campaign_id', $campaignId);
+        }
 
         return $query;
     }
@@ -681,7 +719,8 @@ class IdCardController extends Controller
         int $ageMin,
         int $ageMax,
         $rows,
-        ?string $maritalStatus = null
+        ?string $maritalStatus = null,
+        ?int $campaignId = null
     ): array
     {
         $targetIds = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -736,6 +775,7 @@ class IdCardController extends Controller
             'prefix' => $prefix,
             'age_min' => $ageMin,
             'age_max' => $ageMax,
+            'campaign_id' => $campaignId,
             'marital_status' => $maritalStatus,
             'total' => $total,
             'currently_assigned' => $overwriteCount + $unchangedCount,

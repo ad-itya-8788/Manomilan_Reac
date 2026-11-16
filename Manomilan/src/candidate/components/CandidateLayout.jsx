@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import {
-  Bell, Heart, Home, LogOut, Menu, ReceiptText, User, Compass,
+  Bell, Heart, Home, LogOut, Menu, ReceiptText, Compass,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import CandidateSidebar from "./CandidateSidebar";
@@ -14,7 +14,6 @@ const TABS = [
   ["/candidate", "Home", Home],
   ["/candidate/matches", "Discover", Compass],
   ["/candidate/interests-received", "Interests", Heart],
-  ["/candidate/profile", "Profile", User],
   ["/candidate/melava-receipts", "Receipts", ReceiptText],
 ];
 
@@ -179,6 +178,10 @@ export default function CandidateLayout({ currentPath, candidateInfo, children }
             ) : null}
 
           <main className="mm-main cnd-content">{children}</main>
+          <footer className="cnd-footer">
+            <span>&copy; {new Date().getFullYear()} Aaryans Manomilan. All rights reserved.</span>
+            <span>Candidate Portal</span>
+          </footer>
       </div>
 
       <nav className="mm-bottom-nav" aria-label="Candidate mobile navigation">

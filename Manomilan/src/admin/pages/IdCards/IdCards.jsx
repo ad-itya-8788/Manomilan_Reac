@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   ChevronDown,
@@ -22,7 +22,7 @@ import AdminLayout from "../../components/AdminLayout.jsx";
 import AdminPagination from "../../components/AdminPagination.jsx";
 import AdminStats from "../../components/AdminStats.jsx";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
-import { AdminPermissionContext, useAdminPermission } from "../../../permission-context.jsx";
+import { useAdminPermission } from "../../../permission-context.jsx";
 import { apiMediaUrl, apiUrl, getProfilePhoto, request } from "../../../api";
 import BioDataModal from "../Profiles/BioDataModal.jsx";
 import IdCardDesigner from "./IdCardDesigner.jsx";
@@ -485,7 +485,13 @@ function LiveAssignFeed({ items, updatedCount, onComplete }) {
 /* -------------------------------------------------------------------------- */
 /*  Assignment panel                                                          */
 /* -------------------------------------------------------------------------- */
-function IdCardAssignmentPanel({ onAssigned, onClose }) {
+function IdCardAssignmentPanel({
+  campaigns,
+  campaignId,
+  onCampaignChange,
+  onAssigned,
+  onClose,
+}) {
   const [prefix, setPrefix] = useState("");
   const [ageMin, setAgeMin] = useState(18);
   const [ageMax, setAgeMax] = useState(25);
@@ -527,6 +533,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           age_min: String(ageMin),
           age_max: String(ageMax),
         });
+        if (campaignId && campaignId !== "all") params.set("campaign_id", campaignId);
         if (maritalStatus) params.set("marital_status", maritalStatus);
         const response = await request(`/id-cards/assignment/preview?${params.toString()}`);
         if (id === requestId.current) setPreview(response?.data || null);
@@ -541,7 +548,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [activePrefix, ageMin, ageMax, maritalStatus]);
+  }, [activePrefix, ageMin, ageMax, maritalStatus, campaignId]);
 
   const resetPreview = () => {
     requestId.current += 1;
@@ -595,6 +602,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           prefix: preview.prefix,
           age_min: preview.age_min,
           age_max: preview.age_max,
+          campaign_id: preview.campaign_id || null,
           marital_status: preview.marital_status || null,
           overwrite_existing: preview.overwrite_count > 0,
         },
@@ -617,7 +625,7 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
       <div className="idc-panel-head idcx-rise" style={rise(0)}>
         <div>
           <h2>Generate unique numbers</h2>
-          <p>Enter a code and select an age range. Every matching Melava registration is updated from its date of birth, not just this page.</p>
+          <p>Choose a Melava, enter a code and age range, then preview the registrations that will be updated.</p>
         </div>
         <div className="idc-assignment-head-actions">
           <button type="button" className="ui-btn small secondary" onClick={onClose}>Close</button>
@@ -628,6 +636,33 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
         <div className="idc-assign-step idcx-step idcx-rise" style={rise(1)}>
           <div className="idc-assign-step-head">
             <span className="idc-step-badge">1</span>
+            <span>Melava event</span>
+          </div>
+          <label className="idc-input">
+            <span className="idc-sr-only">Choose a Melava event</span>
+            <select
+              value={campaignId || "all"}
+              onChange={(event) => {
+                onCampaignChange(event.target.value);
+                resetPreview();
+              }}
+            >
+              <option value="all">All Melavas</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.id} value={String(campaign.id)}>
+                  {campaign.melava_code ? `${campaign.melava_code} · ` : ""}
+                  {campaign.title || "Melava"}
+                  {campaign.status === "active" ? " (Active)" : " (Inactive)"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="idc-assign-help">Defaults to the current active Melava. Only matching registrations in this selection will be updated.</p>
+        </div>
+
+        <div className="idc-assign-step idcx-step idcx-rise" style={rise(2)}>
+          <div className="idc-assign-step-head">
+            <span className="idc-step-badge">2</span>
             <span>Unique code / prefix</span>
           </div>
           <label className="idc-input">
@@ -644,9 +679,9 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           <p className="idc-assign-help">Use letters and numbers with hyphens, for example AA-02 or AA-01-.</p>
         </div>
 
-        <div className="idc-assign-step idcx-step idcx-rise" style={rise(2)}>
+        <div className="idc-assign-step idcx-step idcx-rise" style={rise(3)}>
           <div className="idc-assign-step-head">
-            <span className="idc-step-badge">2</span>
+            <span className="idc-step-badge">3</span>
             <span>Age range from date of birth</span>
           </div>
           <div className="idc-age-range">
@@ -678,9 +713,9 @@ function IdCardAssignmentPanel({ onAssigned, onClose }) {
           </label>
         </div>
 
-        <div className="idc-assign-step idc-assign-step-action idcx-step idcx-rise" style={rise(3)}>
+        <div className="idc-assign-step idc-assign-step-action idcx-step idcx-rise" style={rise(4)}>
           <div className="idc-assign-step-head">
-            <span className="idc-step-badge">3</span>
+            <span className="idc-step-badge">4</span>
             <span>Generate numbers</span>
           </div>
           <button
@@ -822,17 +857,19 @@ function IdCardPreviewModal({ card, settings, onClose, onPrint, onDownload }) {
 /*  Main screen                                                               */
 /* -------------------------------------------------------------------------- */
 function IdCardCandidates({ settings, allowGeneration = false, source = "melava" }) {
-  const access = useContext(AdminPermissionContext);
   const hasGenerationPermission = useAdminPermission("create", null, "id_card_generation");
-  const canGenerateIds = Boolean(source === "melava" && allowGeneration && access?.is_super_admin && hasGenerationPermission);
+  const canGenerateIds = Boolean(source === "melava" && allowGeneration && hasGenerationPermission);
   const canExportBiodata = useAdminPermission("export", null, "admin_side_profile");
   const candidatesEndpoint = source === "profiles" ? "/id-cards/all-candidates" : "/id-cards/candidates";
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState({ total: 0, assigned: 0, unassigned: 0 });
   const [ageGroups, setAgeGroups] = useState([]);
   const [search, setSearch] = useState("");
-  const [uniqueId, setUniqueId] = useState("");
-  const [mobile, setMobile] = useState("");
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignId, setCampaignId] = useState("");
+  const [defaultCampaignId, setDefaultCampaignId] = useState("all");
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [campaignError, setCampaignError] = useState("");
   const [gender, setGender] = useState("all");
   const [maritalStatus, setMaritalStatus] = useState("");
   const [ageGroup, setAgeGroup] = useState("all");
@@ -883,11 +920,34 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
     else openAssignment();
   };
 
+  const loadCampaigns = useCallback(async () => {
+    setCampaignsLoading(true);
+    setCampaignError("");
+    try {
+      const response = await request("/id-cards/campaigns");
+      if (!Array.isArray(response?.data)) throw new Error("The Melava list response was invalid.");
+
+      const allCampaigns = response.data;
+      const activeCampaign = allCampaigns.find((campaign) => campaign.status === "active");
+      const nextDefaultId = activeCampaign ? String(activeCampaign.id) : "all";
+      setCampaigns(allCampaigns);
+      setDefaultCampaignId(nextDefaultId);
+      setCampaignId(nextDefaultId);
+    } catch (loadError) {
+      setCampaignError(loadError.message || "Unable to load Melava filters.");
+    } finally {
+      setCampaignsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, [loadCampaigns]);
+
   const buildParams = useCallback((extra = {}) => {
     const params = new URLSearchParams();
     if (activeSearch) params.set("q", activeSearch);
-    if (uniqueId.trim()) params.set("unique_id", uniqueId.trim());
-    if (mobile.trim()) params.set("mobile", mobile.trim());
+    if (campaignId && campaignId !== "all") params.set("campaign_id", campaignId);
     if (gender !== "all") params.set("gender", gender);
     if (maritalStatus) params.set("marital_status", maritalStatus);
     if (ageGroup !== "all") params.set("age_group", ageGroup);
@@ -898,11 +958,11 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
       if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
     });
     return params;
-  }, [activeSearch, uniqueId, mobile, gender, maritalStatus, ageGroup, assigned, dateFrom, dateTo]);
+  }, [activeSearch, campaignId, gender, maritalStatus, ageGroup, assigned, dateFrom, dateTo]);
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
-    if (dateError) {
+    if (campaignsLoading || campaignError || dateError) {
       setLoading(false);
       return;
     }
@@ -921,7 +981,7 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [buildParams, candidatesEndpoint, dateError, page]);
+  }, [buildParams, campaignError, campaignsLoading, candidatesEndpoint, dateError, page]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 0);
@@ -975,19 +1035,18 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
   }, [pendingAction, printCards, settings]);
 
   const hasFilters = Boolean(
-    activeSearch || uniqueId || mobile || gender !== "all" || maritalStatus || ageGroup !== "all"
-    || assigned !== "all" || dateFrom || dateTo,
+    activeSearch || campaignId !== defaultCampaignId || gender !== "all" || maritalStatus
+    || ageGroup !== "all" || assigned !== "all" || dateFrom || dateTo,
   );
 
   const activeFilterCount = [
-    activeSearch, uniqueId, mobile, gender !== "all", maritalStatus,
+    activeSearch, campaignId && campaignId !== "all", gender !== "all", maritalStatus,
     ageGroup !== "all", assigned !== "all", dateFrom, dateTo,
   ].filter(Boolean).length;
 
   const clearFilters = () => {
     setSearch("");
-    setUniqueId("");
-    setMobile("");
+    setCampaignId(defaultCampaignId);
     setGender("all");
     setMaritalStatus("");
     setAgeGroup("all");
@@ -1166,7 +1225,7 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
       <div className={`idc-actionbar ${selected.size ? "has-selection" : ""}`}>
         <div className="idc-selection">
           <strong>{selected.size ? `${selected.size} selected` : "No candidates selected"}</strong>
-          <span>Select candidates to print cards.</span>
+          <span>Select up to {MAX_BATCH_PRINT.toLocaleString("en-IN")} candidates per print batch.</span>
         </div>
         <div className="idc-actionbar-buttons">
           {canGenerateIds ? (
@@ -1174,6 +1233,7 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
               type="button"
               className="ui-btn small secondary is-primary"
               onClick={toggleAssignment}
+              disabled={campaignsLoading || Boolean(campaignError)}
               aria-expanded={assignmentOpen}
               aria-controls="idc-assignment-panel"
             >
@@ -1214,6 +1274,12 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
           <div className="idcx-collapse-inner">
             {panelMounted ? (
               <IdCardAssignmentPanel
+                campaigns={campaigns}
+                campaignId={campaignId}
+                onCampaignChange={(value) => {
+                  setCampaignId(value);
+                  setPage(1);
+                }}
                 onAssigned={() => {
                   setSelected(new Set());
                   load();
@@ -1247,29 +1313,29 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
             type="search"
             value={search}
             onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-            placeholder="Search name, registration number or mobile"
-            aria-label="Search ID card candidates"
+            placeholder="Search name, registration, mobile or unique ID"
+            aria-label="Search by name, registration number, mobile or unique ID"
           />
           {search ? (
             <button type="button" onClick={() => { setSearch(""); setPage(1); }} aria-label="Clear search"><X size={16} /></button>
           ) : null}
         </label>
-        <input
-          type="text"
-          className="ui-select idc-filter-input"
-          value={uniqueId}
-          onChange={(event) => { setUniqueId(event.target.value); setPage(1); }}
-          placeholder="Unique ID contains"
-          aria-label="Filter by unique ID"
-        />
-        <input
-          type="text"
-          className="ui-select idc-filter-input"
-          value={mobile}
-          onChange={(event) => { setMobile(event.target.value); setPage(1); }}
-          placeholder="Mobile contains"
-          aria-label="Filter by mobile"
-        />
+        <select
+          className="ui-select"
+          value={campaignId || "all"}
+          onChange={(event) => { setCampaignId(event.target.value); setPage(1); }}
+          aria-label="Filter by Melava"
+          disabled={campaignsLoading || Boolean(campaignError)}
+        >
+          <option value="all">All Melavas</option>
+          {campaigns.map((campaign) => (
+            <option key={campaign.id} value={String(campaign.id)}>
+              {campaign.melava_code ? `${campaign.melava_code} · ` : ""}
+              {campaign.title || "Melava"}
+              {campaign.status === "active" ? " (Active)" : " (Inactive)"}
+            </option>
+          ))}
+        </select>
         <select className="ui-select" value={gender} onChange={(event) => { setGender(event.target.value); setPage(1); }} aria-label="Filter by gender">
           <option value="all">All genders</option>
           <option value="groom">Groom</option>
@@ -1308,10 +1374,17 @@ function IdCardCandidates({ settings, allowGeneration = false, source = "melava"
 
       {dateError ? <div className="ui-alert" role="alert"><span>{dateError}</span></div> : null}
 
-      {error ? (
+      {campaignError || error ? (
         <div className="ui-alert" role="alert">
-          <span>{error}</span>
-          <button type="button" className="ui-btn small secondary" onClick={load} disabled={loading}>Try again</button>
+          <span>{campaignError || error}</span>
+          <button
+            type="button"
+            className="ui-btn small secondary"
+            onClick={campaignError ? loadCampaigns : load}
+            disabled={loading || campaignsLoading}
+          >
+            Try again
+          </button>
         </div>
       ) : null}
 

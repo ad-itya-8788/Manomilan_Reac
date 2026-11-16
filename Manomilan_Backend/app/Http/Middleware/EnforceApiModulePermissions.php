@@ -93,6 +93,7 @@ class EnforceApiModulePermissions
         if ($user->portal() === 'candidate' && ! in_array($matched, [
             'user_side_profile',
             'matchmaking_suggestions',
+            'candidate_chat',
         ], true)) {
             return $this->deny($request, 'Forbidden.', $matched);
         }

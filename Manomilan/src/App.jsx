@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import MobileBottomNavigation from "./components/MobileBottomNavigation.jsx";
@@ -20,6 +20,7 @@ const SuccessStories = lazy(() => import("./pages/SuccessStories.jsx"));
 const OurServices = lazy(() => import("./pages/OurServices.jsx"));
 const ContactUs = lazy(() => import("./pages/ContactUs.jsx"));
 const FAQ = lazy(() => import("./pages/FAQ.jsx"));
+const HelpChat = lazy(() => import("./Chat/Pages/HelpChat.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword.jsx"));
 const MelavaRegistration = lazy(() => import("./pages/MelavaRegistration.jsx"));
@@ -32,6 +33,8 @@ const CandidateActivity = lazy(() => import("./candidate/pages/Activity"));
 const CandidateNotifications = lazy(() => import("./candidate/pages/Notifications"));
 const CandidateMelavaReceipts = lazy(() => import("./candidate/pages/MelavaReceipts"));
 const CandidateProfileView = lazy(() => import("./candidate/pages/CandidateProfileView"));
+const AdminChat = lazy(() => import("./Chat/Pages/AdminChat.jsx"));
+const ChatWidget = lazy(() => import("./Chat/Components/ChatWidget.jsx"));
 const Profiles = lazy(() => import("./admin/pages/Profiles/Profiles.jsx"));
 const ProfileVerify = lazy(() => import("./admin/pages/Profiles/ProfileVerify.jsx"));
 const Receipt = lazy(() => import("./admin/pages/Profiles/Receipt.jsx"));
@@ -67,6 +70,8 @@ const SuccessStoriesAdmin = lazy(
   () => import("./admin/pages/SuccessStoriesAdmin.jsx")
 );
 
+const RemovedCandidateChat = () => <Navigate to="/candidate" replace />;
+
 // Add a page here: "/url-name": Component
 const ROUTES = {
   "/": Home,
@@ -76,6 +81,7 @@ const ROUTES = {
   "/our-services": OurServices,
   "/contactus": ContactUs,
   "/faq": FAQ,
+  "/help": HelpChat,
 
   "/login": Login,
   "/register": Login,
@@ -92,8 +98,10 @@ const ROUTES = {
   ),
   "/candidate/melava-receipts": CandidateMelavaReceipts,
   "/candidate/notifications": CandidateNotifications,
+  "/candidate/chat": RemovedCandidateChat,
   "/candidate/change-password": ChangePassword,
   "/admin": Dashboard,
+  "/admin/chat": AdminChat,
   "/admin/change-password": ChangePassword,
   "/admin/profiles": Profiles,
   "/admin/inactive-profiles": Profiles,
@@ -361,6 +369,7 @@ export default function App() {
   const isPublicPath = !isAdminPath && !isCandidatePath && path !== "/login" && !isMaintenancePath;
   const showPublicUpcomingEvents = !isAdminPath
     && !isCandidatePath
+    && path !== "/help"
     && !path.startsWith("/melava-registration")
     && !path.startsWith("/workshop-registration")
     && !isMaintenancePath;
@@ -398,10 +407,9 @@ export default function App() {
     isAdminPath &&
     loggedIn &&
     !isChangePasswordPath &&
-    (
-      (path === "/admin/id-generation" && !isSuperAdmin)
-      || (session.role === "admin" && adminPermissions !== null && !permittedAdminRoute)
-    );
+    session.role === "admin" &&
+    adminPermissions !== null &&
+    !permittedAdminRoute;
   const adminPermissionsPending = isAdminPath
     && loggedIn
     && session.role === "admin"
@@ -478,10 +486,11 @@ export default function App() {
   // CHANGED: find the page (and the id from the URL, if any)
   const { Page: Matched, params } = matchRoute(path);
   const Page = needsLogin ? Login : Matched;
-  const showChrome = !isLogin && !(
+  const showChrome = !isLogin && path !== "/help" && !(
     isAdminPath || isCandidatePath || isMelavaRegistration || isWorkshopRegistration || isMaintenancePath
   );
   const showMobileBottomNavigation = MOBILE_NAV_PATHS.has(path);
+  const showPublicHelpWidget = isPublicPath && !loggedIn && !isLogin && path !== "/help";
 
   if (maintenanceActive && isPublicPath) {
     return (
@@ -519,6 +528,11 @@ export default function App() {
         </AdminPermissionContext.Provider>
       ) : <ComingSoon path={path} />}
       {showChrome && <Footer />}
+      {showPublicHelpWidget && (
+        <Suspense fallback={null}>
+          <ChatWidget />
+        </Suspense>
+      )}
       {showPublicUpcomingEvents && <WebsiteUpcomingEvents />}
       {showMobileBottomNavigation && <MobileBottomNavigation />}
     </>

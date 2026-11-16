@@ -1419,6 +1419,19 @@ body.candidate-mode *::after {
   padding: 30px 32px 72px;
 }
 
+.cnd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 16px 32px 22px;
+  border-top: 1px solid var(--cnd-line);
+  color: var(--cnd-muted);
+  font-size: 11px;
+}
+
 .cnd-content > * {
   animation: cnd-page-enter 280ms cubic-bezier(0.2, 0.7, 0.25, 1) both;
 }
@@ -5715,6 +5728,13 @@ body.candidate-mode *::after {
 
   .cnd-content {
     padding: 18px 14px 94px;
+  }
+
+  .cnd-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px 14px 96px;
   }
 
   .cnd-page-head {
