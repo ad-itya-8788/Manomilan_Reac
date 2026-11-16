@@ -199,9 +199,12 @@ Route::prefix('admin/success-stories')->group(function () {
 
     Route::prefix('id-cards')->group(function () {
         Route::get('/candidates', [IdCardController::class, 'candidates']);
+        Route::get('/all-candidates', [IdCardController::class, 'allCandidates']);
         Route::get('/cards', [IdCardController::class, 'cards']);
-        Route::get('/assignment/preview', [IdCardController::class, 'previewAssignment']);
-        Route::post('/assign', [IdCardController::class, 'assign']);
+        Route::middleware('superadmin')->group(function () {
+            Route::get('/assignment/preview', [IdCardController::class, 'previewAssignment']);
+            Route::post('/assign', [IdCardController::class, 'assign']);
+        });
         Route::get('/design', [IdCardController::class, 'showDesign']);
         Route::put('/design', [IdCardController::class, 'saveDesign']);
         Route::put('/design/reset', [IdCardController::class, 'resetDesign']);
@@ -286,5 +289,9 @@ Route::middleware(['auth.api-token', 'superadmin'])
         Route::delete('/candidates/{profile}', [DatabaseMasterController::class, 'destroy'])->whereNumber('profile');
         Route::get('/tables', [DatabaseMasterController::class, 'tables']);
         Route::get('/tables/{table}', [DatabaseMasterController::class, 'table'])->where('table', '[A-Za-z0-9_]+');
+        Route::put('/tables/{table}/records', [DatabaseMasterController::class, 'updateTableRecord'])
+            ->where('table', '[A-Za-z0-9_]+');
+        Route::delete('/tables/{table}/records', [DatabaseMasterController::class, 'deleteTableRecord'])
+            ->where('table', '[A-Za-z0-9_]+');
         Route::get('/audit-logs', [DatabaseMasterController::class, 'audit']);
     });

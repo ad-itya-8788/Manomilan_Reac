@@ -125,7 +125,7 @@ export default function MatchDetailModal({
             disabled={interestDone || interestBusy}
           >
             {interestBusy ? <Loader2 size={16} className="cnd-spin" /> : interestDone ? <Check size={16} /> : <Heart size={16} />}
-            {interestDone ? "Interest sent" : "Send interest"}
+            {interestDone ? "Interest sent" : "Send Interest"}
           </button>
         </div>
       ) : null}

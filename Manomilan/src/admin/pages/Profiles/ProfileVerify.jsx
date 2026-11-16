@@ -3,6 +3,7 @@ import {
   Contact, CalendarDays, MapPin, GraduationCap, Briefcase, IndianRupee, Award, HeartPulse, Camera,
   Eye, ArrowLeft, Save, Loader2, AlertTriangle, CheckCircle2, Clock, XCircle, Ban,
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import AdminLayout from "../../components/AdminLayout";
 import { apiMediaUrl, getProfilePhoto, request } from "../../../api";
 import { useAdminPermission } from "../../../permission-context";
@@ -40,7 +41,6 @@ const STATUSES = [
    Load:  GET  /profiles/:id/verification
    Save:  POST /profiles/:id/verify
    ===================================================================== */
-const LINKS = { back: "/admin/unverified-profiles" };
 const MAX_REMARKS = 255;
 
 /* ---- Security helpers ---- */
@@ -103,14 +103,18 @@ function Photo({ profile }) {
    3. THE PAGE
    ==================================================================== */
 export default function ProfileVerify({ params }) {
+  const location = useLocation();
+  const openedFromVerified = new URLSearchParams(location.search).get("from") === "verified";
   const canApproveProfile = useAdminPermission("approve", "/admin/verified-profiles");
   const id = params?.id;
   const idOk = isValidId(id);
 
   const [profile, setProfile] = useState(null);
   const [files, setFiles] = useState({});             // key → uploaded file link
+  const [documentReferences, setDocumentReferences] = useState({});
   const [form, setForm] = useState({});               // key → { status, remarks }
   const [savedSnapshot, setSavedSnapshot] = useState("");
+  const [savedAsUnverified, setSavedAsUnverified] = useState(false);
   const [preview, setPreview] = useState(null);
 
   const [loading, setLoading] = useState(idOk);
@@ -149,6 +153,7 @@ export default function ProfileVerify({ params }) {
         ])),
       });
       setFiles(Object.fromEntries(DOCUMENTS.map(({ key }) => [key, safeUrl(docs[key]?.file_url)])));
+      setDocumentReferences(Object.fromEntries(DOCUMENTS.map(({ key }) => [key, docs[key]?.has_reference === true])));
       setForm(next);
       setSavedSnapshot(JSON.stringify(next));
     } catch (e) {
@@ -189,6 +194,7 @@ export default function ProfileVerify({ params }) {
     try {
       await saveVerification(id, form);
       setSavedSnapshot(JSON.stringify(form));
+      setSavedAsUnverified(DOCUMENTS.some(({ key }) => documentReferences[key] && form[key].status !== "verified"));
       showToast("success", "Verification saved successfully.");
     } catch (err) {
       showToast("error", err.message);
@@ -199,6 +205,9 @@ export default function ProfileVerify({ params }) {
 
   const total = DOCUMENTS.length;
   const percent = Math.round((counts.verified / total) * 100);
+  const backPath = openedFromVerified && !savedAsUnverified
+    ? "/admin/verified-profiles"
+    : "/admin/unverified-profiles";
 
   return (
     <AdminLayout currentPath="/admin/unverified-profiles">
@@ -330,7 +339,7 @@ export default function ProfileVerify({ params }) {
 
           {/* ---------- Buttons (always visible) ---------- */}
           <div className="pv-foot">
-            <a href={LINKS.back} className="pv-btn pv-btn-ghost"><ArrowLeft size={16} /> Back</a>
+            <a href={backPath} className="pv-btn pv-btn-ghost"><ArrowLeft size={16} /> Back</a>
             {canApproveProfile ? (
               <button type="submit" className="pv-btn pv-btn-green" disabled={saving || loading || !!error || !dirty}>
                 {saving ? <><Loader2 size={16} className="pv-spin" /> Saving…</> : <><Save size={16} /> Save Verification</>}

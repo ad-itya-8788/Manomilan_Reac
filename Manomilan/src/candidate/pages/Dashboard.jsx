@@ -128,7 +128,7 @@ function NewCandidateCard({ match, interestBusy, onOpen, onInterest }) {
             onClick={() => onInterest(match)}
             disabled={interestDone || interestBusy}
           >
-            <Send size={13} /> {interestDone ? "Sent" : "Express Interest"}
+            <Send size={13} /> {interestDone ? "Sent" : "Send Interest"}
           </button>
         </div>
       </div>
@@ -204,7 +204,7 @@ function HomeProfileCard({ match, featured = false, onOpen, onInterest, interest
             disabled={interestDone || interestBusy}
           >
             <Heart size={17} fill={interestDone ? "currentColor" : "none"} />
-            {interestDone ? "Interest sent" : "Send interest"}
+            {interestDone ? "Interest sent" : "Send Interest"}
           </button>
           <Link className="mm-view-button" to={`/candidate/matches/${match.id}`}>
             View profile <ArrowRight size={15} />

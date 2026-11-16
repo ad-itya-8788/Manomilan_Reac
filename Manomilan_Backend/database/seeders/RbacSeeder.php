@@ -54,10 +54,14 @@ class RbacSeeder extends Seeder
             $adminPermissions = array_fill_keys(array_values(ModulePermission::ACTIONS), true);
             $adminPermissions[ModulePermission::ACTIONS['manage']] = false;
 
-            foreach (Module::query()->pluck('id') as $moduleId) {
+            foreach (Module::query()->get(['id', 'module_key']) as $module) {
+                $permissions = $module->module_key === 'id_card_generation'
+                    ? array_fill_keys(array_values(ModulePermission::ACTIONS), false)
+                    : $adminPermissions;
+
                 ModulePermission::query()->updateOrCreate(
-                    ['role_id' => $adminRole->id, 'module_id' => $moduleId],
-                    $adminPermissions
+                    ['role_id' => $adminRole->id, 'module_id' => $module->id],
+                    $permissions
                 );
             }
         });

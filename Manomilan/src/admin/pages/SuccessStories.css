@@ -739,11 +739,9 @@ cursor: pointer;
 .ss-story-photo {
   position: relative;
   width: 100%;
-  aspect-ratio: 2.35 / 1;
-  min-height: 170px;
-  max-height: 260px;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
-  background: linear-gradient(135deg, #e8f5f2, #f8ecef);
+  background: #f1f4f8;
 }
 
 .ss-story-photo > img {
@@ -753,13 +751,8 @@ cursor: pointer;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center 38%;
-  transition: transform .35s ease;
-}
-
-.ss-story-card:hover .ss-story-photo > img {
-  transform: scale(1.035);
+  object-fit: contain;
+  object-position: center;
 }
 
 .ss-story-photo-empty {
@@ -895,10 +888,6 @@ padding: 17px;
   grid-template-columns: 1fr;
 }
 
-.ss-story-photo {
-  aspect-ratio: 2.8 / 1;
-}
-
 .ss-header {
 align-items: flex-start;
 flex-direction: column;
@@ -982,11 +971,6 @@ grid-template-columns: repeat(2, minmax(0, 1fr));
 .ss-modal-footer .ss-primary-btn,
 .ss-cancel-btn {
 padding: 10px 14px;
-}
-
-.ss-story-photo {
-  aspect-ratio: 1.65 / 1;
-  min-height: 160px;
 }
 
 .ss-story-card-body {

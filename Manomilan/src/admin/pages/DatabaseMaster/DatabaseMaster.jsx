@@ -66,6 +66,14 @@ const displayValue = (value) => {
   return String(value);
 };
 
+const tableFormValue = (column, value) => {
+  if (column.type === "boolean") return value === true || value === 1 || value === "1";
+  if (value === null || value === undefined) return "";
+  if (column.type === "date") return String(value).slice(0, 10);
+  if (column.type === "json" && typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
+};
+
 const dateValue = (value) => (value ? String(value).slice(0, 10) : "");
 
 const formFromProfile = (profile) => {
@@ -106,7 +114,14 @@ function Pagination({ meta, onPage }) {
   );
 }
 
-function RecordTable({ columns, rows, onEditRow, onDeleteRow, deletingRecordId }) {
+function RecordTable({
+  columns,
+  rows,
+  onEditRow,
+  onDeleteRow,
+  deletingRecordId,
+  getRecordKey = (row) => row.id,
+}) {
   const visibleColumns = useMemo(() => {
     if (columns?.length) {
       return columns.map((column) => (typeof column === "string" ? column : column.name));
@@ -130,45 +145,56 @@ function RecordTable({ columns, rows, onEditRow, onDeleteRow, deletingRecordId }
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
-            <tr key={row.id ?? index}>
-              {visibleColumns.map((column) => (
-                <td key={column}>{displayValue(row[column])}</td>
-              ))}
-              {onEditRow || onDeleteRow ? (
-                <td>
-                  <div className="dbm-row-actions">
-                    {onEditRow ? (
-                      <button
-                        type="button"
-                        className="dbm-row-action"
-                        onClick={() => onEditRow(row)}
-                        disabled={row.id === null || row.id === undefined || deletingRecordId !== null}
-                        aria-label={`Edit record ${row.id ?? ""}`}
-                        title="Edit record"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                    ) : null}
-                    {onDeleteRow ? (
-                      <button
-                        type="button"
-                        className="dbm-row-action is-danger"
-                        onClick={() => onDeleteRow(row)}
-                        disabled={row.id === null || row.id === undefined || deletingRecordId !== null}
-                        aria-label={`Delete record ${row.id ?? ""}`}
-                        title="Delete record"
-                      >
-                        {deletingRecordId === row.id
-                          ? <RefreshCw size={14} className="dbm-spin" />
-                          : <Trash2 size={14} />}
-                      </button>
-                    ) : null}
-                  </div>
-                </td>
-              ) : null}
-            </tr>
-          ))}
+          {rows.map((row, index) => {
+            const recordKey = getRecordKey(row);
+            const rowCanEdit = row._database_master_can_edit !== false;
+            const rowCanDelete = row._database_master_can_delete !== false;
+            return (
+              <tr key={recordKey ?? index}>
+                {visibleColumns.map((column) => (
+                  <td key={column}>{displayValue(row[column])}</td>
+                ))}
+                {onEditRow || onDeleteRow ? (
+                  <td>
+                    <div className="dbm-row-actions">
+                      {onEditRow ? (
+                        <button
+                          type="button"
+                          className="dbm-row-action"
+                          onClick={() => onEditRow(row)}
+                          disabled={recordKey === null
+                            || recordKey === undefined
+                            || deletingRecordId !== null
+                            || !rowCanEdit}
+                          aria-label={`Edit record ${recordKey ?? ""}`}
+                          title="Edit record"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      ) : null}
+                      {onDeleteRow ? (
+                        <button
+                          type="button"
+                          className="dbm-row-action is-danger"
+                          onClick={() => onDeleteRow(row)}
+                          disabled={recordKey === null
+                            || recordKey === undefined
+                            || deletingRecordId !== null
+                            || !rowCanDelete}
+                          aria-label={`Delete record ${recordKey ?? ""}`}
+                          title={rowCanDelete ? "Delete record" : "Use the protected record workflow"}
+                        >
+                          {deletingRecordId !== null && String(deletingRecordId) === String(recordKey)
+                            ? <RefreshCw size={14} className="dbm-spin" />
+                            : <Trash2 size={14} />}
+                        </button>
+                      ) : null}
+                    </div>
+                  </td>
+                ) : null}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -197,6 +223,14 @@ export default function DatabaseMaster() {
   const [tableData, setTableData] = useState(null);
   const [tableQuery, setTableQuery] = useState("");
   const [tableLoading, setTableLoading] = useState(false);
+  const [editingTableRecord, setEditingTableRecord] = useState(null);
+  const [tableEditValues, setTableEditValues] = useState({});
+  const [savingTableRecord, setSavingTableRecord] = useState(false);
+  const [tableDeleteTarget, setTableDeleteTarget] = useState(null);
+  const [tableDeleteConfirmText, setTableDeleteConfirmText] = useState("");
+  const [tableDeleteImpact, setTableDeleteImpact] = useState(null);
+  const [loadingTableDeleteImpact, setLoadingTableDeleteImpact] = useState(false);
+  const [deletingTableRecordKey, setDeletingTableRecordKey] = useState(null);
   const [passwordForm, setPasswordForm] = useState({ password: "", password_confirmation: "" });
   const [changingPassword, setChangingPassword] = useState(false);
   const [deletionPlan, setDeletionPlan] = useState(null);
@@ -251,6 +285,11 @@ export default function DatabaseMaster() {
     setTab(nextTab);
     setError("");
     setNotice("");
+    if (nextTab !== "tables") {
+      setEditingTableRecord(null);
+      setTableDeleteTarget(null);
+      setTableDeleteImpact(null);
+    }
 
     if (nextTab === "tables" && tables.length === 0) {
       request("/database-master/tables")
@@ -410,6 +449,11 @@ export default function DatabaseMaster() {
   };
 
   const loadTable = async (table, page = 1, term = tableQuery) => {
+    if (table !== selectedTable) setTableData(null);
+    setEditingTableRecord(null);
+    setTableDeleteTarget(null);
+    setTableDeleteImpact(null);
+    setTableDeleteConfirmText("");
     setSelectedTable(table);
     setTableLoading(true);
     setError("");
@@ -422,6 +466,142 @@ export default function DatabaseMaster() {
       setError(messageFrom(requestError));
     } finally {
       setTableLoading(false);
+    }
+  };
+
+  const startTableRecordEdit = (record) => {
+    const values = {};
+    (tableData?.editable_columns || []).forEach((column) => {
+      values[column.name] = tableFormValue(column, record[column.name]);
+    });
+    setTableEditValues(values);
+    setEditingTableRecord(record);
+    setError("");
+    setNotice("");
+  };
+
+  const saveTableRecord = async (event) => {
+    event.preventDefault();
+    const primaryKey = tableData?.primary_key;
+    const recordKey = primaryKey ? editingTableRecord?.[primaryKey] : null;
+    if (!selectedTable || recordKey === null || recordKey === undefined) return;
+
+    const values = {};
+    for (const column of tableData.editable_columns || []) {
+      const currentValue = tableEditValues[column.name];
+      const originalFormValue = tableFormValue(column, editingTableRecord[column.name]);
+      if (currentValue === originalFormValue) continue;
+
+      if (column.type === "json" && currentValue !== "") {
+        try {
+          JSON.parse(currentValue);
+        } catch {
+          setError(`${column.name.replace(/_/g, " ")} must contain valid JSON.`);
+          return;
+        }
+      }
+      values[column.name] = column.type === "boolean"
+        ? Boolean(currentValue)
+        : currentValue === ""
+          ? null
+          : currentValue;
+    }
+
+    if (Object.keys(values).length === 0) {
+      setNotice("No changes to save.");
+      setEditingTableRecord(null);
+      return;
+    }
+
+    setSavingTableRecord(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await request(
+        `/database-master/tables/${encodeURIComponent(selectedTable)}/records`,
+        {
+          method: "PUT",
+          body: {
+            primary_key: primaryKey,
+            record_key: String(recordKey),
+            values,
+          },
+        },
+      );
+      setNotice(response.message || "Database record updated.");
+      setEditingTableRecord(null);
+      await loadTable(selectedTable, tableData.records?.current_page || 1, tableQuery);
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setSavingTableRecord(false);
+    }
+  };
+
+  const startTableDelete = async (record) => {
+    const recordKey = tableData?.primary_key ? record[tableData.primary_key] : null;
+    if (recordKey === null || recordKey === undefined) return;
+
+    setTableDeleteTarget(record);
+    setTableDeleteConfirmText("");
+    setTableDeleteImpact(null);
+    setError("");
+    setNotice("");
+    if (selectedTable !== "profiles") return;
+
+    setLoadingTableDeleteImpact(true);
+    try {
+      const response = await request(`/database-master/candidates/${recordKey}/dependencies`);
+      setTableDeleteImpact(response.data || null);
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setLoadingTableDeleteImpact(false);
+    }
+  };
+
+  const deleteTableRecord = async (event) => {
+    event.preventDefault();
+    const primaryKey = tableData?.primary_key;
+    const recordKey = primaryKey ? tableDeleteTarget?.[primaryKey] : null;
+    if (
+      !selectedTable
+      || recordKey === null
+      || recordKey === undefined
+      || tableDeleteConfirmText !== selectedTable
+      || (selectedTable === "profiles" && !tableDeleteImpact?.can_delete)
+    ) {
+      return;
+    }
+
+    const recordKeyString = String(recordKey);
+    setDeletingTableRecordKey(recordKeyString);
+    setError("");
+    setNotice("");
+    try {
+      const response = await request(
+        `/database-master/tables/${encodeURIComponent(selectedTable)}/records`,
+        {
+          method: "DELETE",
+          body: {
+            primary_key: primaryKey,
+            record_key: recordKeyString,
+            confirm_table: selectedTable,
+          },
+        },
+      );
+      const currentPage = Number(tableData.records?.current_page) || 1;
+      const nextPage = tableData.records?.data?.length === 1 && currentPage > 1
+        ? currentPage - 1
+        : currentPage;
+      setTableDeleteTarget(null);
+      setTableDeleteImpact(null);
+      setNotice(response.message || "Database record permanently deleted.");
+      await loadTable(selectedTable, nextPage, tableQuery);
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setDeletingTableRecordKey(null);
     }
   };
 
@@ -1079,7 +1259,25 @@ export default function DatabaseMaster() {
                                 </span>
                               ))}
                             </div>
-                            <RecordTable columns={tableData.columns} rows={tableData.records?.data} />
+                            <p className="dbm-shared-record-warning">
+                              Direct edits bypass module workflows. Primary/foreign keys, credentials, tokens, file paths, audit tables, and framework tables are protected. Changes are audit logged.
+                            </p>
+                            {tableData.write_protection_reason ? (
+                              <p className="dbm-empty">{tableData.write_protection_reason}</p>
+                            ) : null}
+                            {selectedTable === "users" ? (
+                              <p className="dbm-shared-record-warning">
+                                Candidate-linked accounts and super-administrator accounts cannot be deleted here. Use the candidate deletion plan for linked accounts.
+                              </p>
+                            ) : null}
+                            <RecordTable
+                              columns={tableData.columns}
+                              rows={tableData.records?.data}
+                              onEditRow={tableData.can_edit ? startTableRecordEdit : undefined}
+                              onDeleteRow={tableData.can_delete ? startTableDelete : undefined}
+                              deletingRecordId={deletingTableRecordKey}
+                              getRecordKey={(row) => row[tableData.primary_key]}
+                            />
                             <Pagination
                               meta={tableData.records}
                               onPage={(page) => loadTable(selectedTable, page, tableQuery)}
@@ -1092,6 +1290,192 @@ export default function DatabaseMaster() {
                     )}
                   </section>
                 </div>
+              </div>
+            ) : null}
+
+            {tab === "tables" && editingTableRecord ? (
+              <div className="dbm-modal-backdrop" role="presentation">
+                <form
+                  className="dbm-record-editor"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="dbm-table-record-editor-title"
+                  onSubmit={saveTableRecord}
+                >
+                  <div className="dbm-record-editor-heading">
+                    <div>
+                      <span className="dbm-eyebrow">Database table · {selectedTable}</span>
+                      <h2 id="dbm-table-record-editor-title">
+                        Edit record #{String(editingTableRecord[tableData?.primary_key] ?? "")}
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="dbm-icon-button"
+                      onClick={() => setEditingTableRecord(null)}
+                      disabled={savingTableRecord}
+                      aria-label="Close editor"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <p className="dbm-shared-record-warning">
+                    Only ordinary fields are editable here. Changes to linked fields, credentials, timestamps, or uploaded files are blocked.
+                  </p>
+                  {error ? <div className="dbm-alert dbm-alert-error" role="alert">{error}</div> : null}
+                  <div className="dbm-record-editor-fields">
+                    {(tableData?.editable_columns || []).map((column) => (
+                      <label key={column.name} className={column.type === "json" ? "dbm-span-2" : ""}>
+                        <span>{column.name.replace(/_/g, " ")}</span>
+                        {column.type === "boolean" ? (
+                          <input
+                            type="checkbox"
+                            checked={Boolean(tableEditValues[column.name])}
+                            onChange={(event) => setTableEditValues({
+                              ...tableEditValues,
+                              [column.name]: event.target.checked,
+                            })}
+                          />
+                        ) : column.type === "json" ? (
+                          <textarea
+                            rows={5}
+                            value={tableEditValues[column.name] ?? ""}
+                            onChange={(event) => setTableEditValues({
+                              ...tableEditValues,
+                              [column.name]: event.target.value,
+                            })}
+                          />
+                        ) : (
+                          <input
+                            type={column.type === "number" || column.type === "integer"
+                              ? "number"
+                              : column.type === "date" ? "date" : "text"}
+                            step={column.type === "number" ? "any" : undefined}
+                            value={tableEditValues[column.name] ?? ""}
+                            required={!column.nullable}
+                            onChange={(event) => setTableEditValues({
+                              ...tableEditValues,
+                              [column.name]: event.target.value,
+                            })}
+                          />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="dbm-record-editor-actions">
+                    <button
+                      type="button"
+                      className="dbm-button dbm-button-quiet"
+                      onClick={() => setEditingTableRecord(null)}
+                      disabled={savingTableRecord}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="dbm-button dbm-button-primary" disabled={savingTableRecord}>
+                      <Save size={16} /> {savingTableRecord ? "Saving…" : "Save record"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : null}
+
+            {tab === "tables" && tableDeleteTarget ? (
+              <div className="dbm-modal-backdrop" role="presentation">
+                <form
+                  className="dbm-record-editor dbm-table-delete-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="dbm-table-delete-title"
+                  onSubmit={deleteTableRecord}
+                >
+                  <div className="dbm-record-editor-heading">
+                    <div>
+                      <span className="dbm-eyebrow">Permanent deletion · {selectedTable}</span>
+                      <h2 id="dbm-table-delete-title">
+                        Delete record #{String(tableDeleteTarget[tableData?.primary_key] ?? "")}?
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      className="dbm-icon-button"
+                      onClick={() => {
+                        setTableDeleteTarget(null);
+                        setTableDeleteImpact(null);
+                        setTableDeleteConfirmText("");
+                      }}
+                      disabled={deletingTableRecordKey !== null}
+                      aria-label="Close deletion confirmation"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="dbm-shared-record-warning">
+                    <strong>This action is permanent.</strong>
+                    <p>
+                      The row will be removed from <code>{selectedTable}</code>. Database foreign-key cascades may also remove linked rows; restrictive relationships may block deletion. Uploaded files are not deleted. The operation is audit logged.
+                    </p>
+                  </div>
+                  {selectedTable === "profiles" ? (
+                    <div className="dbm-table-delete-impact">
+                      {loadingTableDeleteImpact ? <p>Checking linked records…</p> : null}
+                      {tableDeleteImpact?.items?.length ? (
+                        <ul>
+                          {tableDeleteImpact.items.map((item) => (
+                            <li key={item.table}>
+                              {item.label}: {item.count} record(s){item.blocking ? " · blocks deletion" : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {tableDeleteImpact?.blocking_messages?.map((message) => (
+                        <p key={message} className="dbm-alert dbm-alert-error">{message}</p>
+                      ))}
+                      {tableDeleteImpact && !tableDeleteImpact.items?.some((item) => item.count > 0) ? (
+                        <p>No linked records were found in the candidate deletion plan.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {error ? <div className="dbm-alert dbm-alert-error" role="alert">{error}</div> : null}
+                  <label className="dbm-table-delete-confirm">
+                    <span>Type <strong>{selectedTable}</strong> to confirm</span>
+                    <input
+                      type="text"
+                      value={tableDeleteConfirmText}
+                      onChange={(event) => setTableDeleteConfirmText(event.target.value)}
+                      autoComplete="off"
+                      required
+                    />
+                  </label>
+                  <div className="dbm-record-editor-actions">
+                    <button
+                      type="button"
+                      className="dbm-button dbm-button-quiet"
+                      onClick={() => {
+                        setTableDeleteTarget(null);
+                        setTableDeleteImpact(null);
+                        setTableDeleteConfirmText("");
+                      }}
+                      disabled={deletingTableRecordKey !== null}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="dbm-button dbm-button-danger"
+                      disabled={
+                        deletingTableRecordKey !== null
+                        || loadingTableDeleteImpact
+                        || tableDeleteConfirmText !== selectedTable
+                        || (selectedTable === "profiles" && !tableDeleteImpact?.can_delete)
+                      }
+                    >
+                      <Trash2 size={16} />
+                      {deletingTableRecordKey !== null ? "Deleting…" : "Permanently delete"}
+                    </button>
+                  </div>
+                </form>
               </div>
             ) : null}
 

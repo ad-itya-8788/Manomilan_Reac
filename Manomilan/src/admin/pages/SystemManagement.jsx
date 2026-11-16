@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, Download, Edit3, History, KeyRound, Plus, RefreshCw, Save, ShieldCheck, Trash2, UserCheck } from "lucide-react";
+import { Boxes, Download, Edit3, History, KeyRound, LoaderCircle, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, UserCheck, X } from "lucide-react";
 import AdminLayout from "../components/AdminLayout";
 import AdminStats from "../components/AdminStats";
 import { download, request } from "../../api";
@@ -26,6 +26,7 @@ export default function SystemManagement() {
   const [permissionModules, setPermissionModules] = useState([]);
   const [permissionLastUpdated, setPermissionLastUpdated] = useState(null);
   const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditMeta, setAuditMeta] = useState(null);
   const [auditActions, setAuditActions] = useState([]);
@@ -81,14 +82,21 @@ export default function SystemManagement() {
     return () => window.clearTimeout(timer);
   }, [activeTab, loadRolePermissions]);
 
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (searchTerm = "") => {
+    setUsersLoading(true);
     try {
-      const response = await request(`/system/users${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-      setUsers(response.data.data || []);
+      const search = searchTerm.trim();
+      const response = await request(`/system/users${search ? `?q=${encodeURIComponent(search)}` : ""}`);
+      if (!Array.isArray(response.data?.data)) {
+        throw new Error("The users response is invalid. Refresh and try again.");
+      }
+      setUsers(response.data.data);
     } catch (requestError) {
       setError(messageFrom(requestError));
+    } finally {
+      setUsersLoading(false);
     }
-  }, [query]);
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "User access") return undefined;
@@ -215,7 +223,12 @@ export default function SystemManagement() {
     run(
       () => request(`/system/users/${userId}/role`, { method: "PATCH", body: { role_id: Number(roleId) } }),
       "User role updated.",
-    ).then(loadUsers);
+    ).then(() => loadUsers(query));
+  };
+
+  const searchUsers = (event) => {
+    event.preventDefault();
+    loadUsers(query);
   };
 
   const updateModuleStatus = (module) => run(
@@ -434,19 +447,56 @@ export default function SystemManagement() {
             ) : null}
 
             {activeTab === "User access" ? (
-              <section className="sm-panel">
-                <div className="sm-panel-heading"><div><h2>User role assignment</h2><p>Change roles only when the account requires different access.</p></div>
-                  <form className="sm-search" onSubmit={(event) => { event.preventDefault(); loadUsers(); }}>
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search user" />
-                    <button className="sm-button">Search</button>
+              <section className="sm-panel sm-user-access-panel">
+                <div className="sm-panel-heading sm-user-access-heading">
+                  <div>
+                    <h2>User role assignment</h2>
+                    <p>Find an account, then assign the role that matches its required access.</p>
+                  </div>
+                  <form className="sm-search" role="search" onSubmit={searchUsers}>
+                    <div className="sm-search-field">
+                      <Search size={17} aria-hidden="true" />
+                      <input
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Name, username, or email"
+                        aria-label="Search users by name, username, or email"
+                      />
+                      {query ? (
+                        <button
+                          type="button"
+                          className="sm-search-clear"
+                          onClick={() => {
+                            setQuery("");
+                            loadUsers("");
+                          }}
+                          disabled={usersLoading}
+                          aria-label="Clear user search"
+                        >
+                          <X size={16} />
+                        </button>
+                      ) : null}
+                    </div>
+                    <button type="submit" className="sm-button primary sm-search-submit" disabled={usersLoading}>
+                      {usersLoading ? <LoaderCircle size={16} className="sm-spin" /> : <Search size={16} />}
+                      {usersLoading ? "Searching" : "Search"}
+                    </button>
                   </form>
                 </div>
+                <div className="sm-user-access-meta" aria-live="polite">
+                  <span>
+                    {usersLoading ? "Searching users…" : `${users.length} ${users.length === 1 ? "user" : "users"} shown`}
+                  </span>
+                  <span>Search by name, username, or email</span>
+                </div>
                 <div className="sm-table-wrap">
-                  <table className="sm-table">
+                  <table className="sm-table sm-user-table">
                     <thead><tr><th>User</th><th>Username</th><th>Role</th><th>Assign role</th></tr></thead>
                     <tbody>{users.map((user) => (
                       <tr key={user.id}>
-                        <td>{user.name}<small>{user.email}</small></td><td>{user.username}</td><td>{user.role?.name || "Unassigned"}</td>
+                        <td><strong>{user.name}</strong><small>{user.email}</small></td>
+                        <td><code>{user.username}</code></td>
+                        <td><span className={`sm-role-pill${user.role?.name ? "" : " unassigned"}`}>{user.role?.name || "Unassigned"}</span></td>
                         <td><select value={user.role_id || ""} onChange={(event) => assignRole(user.id, event.target.value)} aria-label={`Role for ${user.name}`}>
                           <option value="" disabled>Select role</option>
                           {snapshot.roles.filter((role) => role.is_active && role.name.toLowerCase() !== "superadmin").map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
@@ -454,6 +504,16 @@ export default function SystemManagement() {
                       </tr>
                     ))}</tbody>
                   </table>
+                  {usersLoading && users.length === 0 ? (
+                    <div className="sm-user-table-state"><LoaderCircle size={18} className="sm-spin" /> Loading users…</div>
+                  ) : null}
+                  {!usersLoading && users.length === 0 ? (
+                    <div className="sm-user-table-state empty">
+                      <UserCheck size={20} />
+                      <strong>No users found</strong>
+                      <span>Try another name, username, or email.</span>
+                    </div>
+                  ) : null}
                 </div>
               </section>
             ) : null}

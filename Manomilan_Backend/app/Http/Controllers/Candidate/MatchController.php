@@ -276,6 +276,11 @@ class MatchController extends CandidateController
                 foreach (['full_name', 'reg_id', 'phone', 'email', 'birth_place', 'about_me'] as $column) {
                     $inner->orWhere($column, 'like', $term);
                 }
+                $inner->orWhere('addresses->current->city', 'like', $term)
+                    ->orWhereHas('employments', fn (Builder $details) => $details
+                        ->where('profession', 'like', $term)
+                        ->orWhere('working_field', 'like', $term)
+                        ->orWhere('employment_city', 'like', $term));
             });
         }
 

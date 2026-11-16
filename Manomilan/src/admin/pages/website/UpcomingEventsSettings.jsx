@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Bell,
   Calendar,
@@ -33,6 +33,7 @@ const EMPTY = {
   position: "bottom-right",
   url: "",
   open_new_tab: true,
+  images: [],
 };
 
 export default function UpcomingEventsSettings() {
@@ -42,19 +43,35 @@ export default function UpcomingEventsSettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [newImages, setNewImages] = useState([]);
+  const [removedImages, setRemovedImages] = useState([]);
+  const imagePreviewUrls = useRef(new Set());
+
+  const clearNewImages = useCallback(() => {
+    imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    imagePreviewUrls.current.clear();
+    setNewImages([]);
+    setRemovedImages([]);
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    clearNewImages();
     try {
       const response = await getUpcomingEventsSettings();
-      setForm({ ...EMPTY, ...(response?.data || {}), url: response?.data?.url || "" });
+      setForm({
+        ...EMPTY,
+        ...(response?.data || {}),
+        url: response?.data?.url || "",
+        images: Array.isArray(response?.data?.images) ? response.data.images : [],
+      });
     } catch (requestError) {
       setError(requestError.message || "Unable to load Upcoming Events settings.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [clearNewImages]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 0);
@@ -68,6 +85,59 @@ export default function UpcomingEventsSettings() {
     setNotice("");
   };
 
+  const addNewImages = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (files.some((file) => !allowedTypes.includes(file.type))) {
+      setError("Choose JPG, PNG, or WebP image files.");
+      return;
+    }
+    if (files.some((file) => file.size > 5 * 1024 * 1024)) {
+      setError("Each image must be 5 MB or smaller.");
+      return;
+    }
+    if (form.images.length + newImages.length + files.length > 10) {
+      setError("You can add up to 10 Upcoming Events images.");
+      return;
+    }
+
+    const selected = files.map((file) => {
+      const preview = URL.createObjectURL(file);
+      imagePreviewUrls.current.add(preview);
+      return { file, preview };
+    });
+    setNewImages((previous) => [...previous, ...selected]);
+    setError("");
+    setNotice("");
+  };
+
+  const removeSavedImage = (index) => {
+    const image = form.images[index];
+    if (image?.path) {
+      setRemovedImages((previous) => previous.includes(image.path)
+        ? previous
+        : [...previous, image.path]);
+    }
+    setForm((previous) => ({
+      ...previous,
+      images: previous.images.filter((_, imageIndex) => imageIndex !== index),
+    }));
+    setError("");
+    setNotice("");
+  };
+
+  const removeNewImage = (index) => {
+    const removed = newImages[index];
+    if (removed) {
+      URL.revokeObjectURL(removed.preview);
+      imagePreviewUrls.current.delete(removed.preview);
+    }
+    setNewImages((previous) => previous.filter((_, imageIndex) => imageIndex !== index));
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     if (saving) return;
@@ -79,8 +149,27 @@ export default function UpcomingEventsSettings() {
     setNotice("");
     setSaving(true);
     try {
-      const response = await saveUpcomingEventsSettings(form);
-      setForm({ ...EMPTY, ...(response?.data || {}), url: response?.data?.url || "" });
+      const body = new FormData();
+      body.append("_method", "PUT");
+      body.append("enabled", form.enabled ? "1" : "0");
+      body.append("label", form.label);
+      body.append("icon", form.icon);
+      body.append("background_color", form.background_color);
+      body.append("text_color", form.text_color);
+      body.append("position", form.position);
+      body.append("url", form.url);
+      body.append("open_new_tab", form.open_new_tab ? "1" : "0");
+      removedImages.forEach((path) => body.append("remove_images[]", path));
+      newImages.forEach(({ file }) => body.append("new_images[]", file));
+
+      const response = await saveUpcomingEventsSettings(body);
+      clearNewImages();
+      setForm({
+        ...EMPTY,
+        ...(response?.data || {}),
+        url: response?.data?.url || "",
+        images: Array.isArray(response?.data?.images) ? response.data.images : [],
+      });
       setNotice(response?.message || "Upcoming Events settings saved.");
     } catch (requestError) {
       setError(requestError.message || "Unable to save Upcoming Events settings.");
@@ -88,6 +177,11 @@ export default function UpcomingEventsSettings() {
       setSaving(false);
     }
   };
+
+  useEffect(() => () => {
+    imagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    imagePreviewUrls.current.clear();
+  }, []);
 
   const selectedIcon = ICONS.find((item) => item.value === form.icon) || ICONS[0];
   const PreviewIcon = selectedIcon.Icon;
@@ -97,7 +191,7 @@ export default function UpcomingEventsSettings() {
       <div className="adm-ui wm-page">
         <section className="wm-hero">
           <h1>Upcoming Events Settings</h1>
-          <p>Control the floating public button shown on the website homepage.</p>
+          <p>Control the floating button shown on the homepage, login/register, and public information pages. It is hidden on admin, candidate, Melava-registration, and workshop-registration pages.</p>
         </section>
 
         {error ? <div className="wm-alert error">{error}</div> : null}
@@ -106,7 +200,7 @@ export default function UpcomingEventsSettings() {
         <form className="wm-layout" onSubmit={submit}>
           <div className="wm-panel">
             <h2>Button settings</h2>
-            <p>Changes apply to the public homepage after saving.</p>
+            <p>Changes apply to public pages after saving.</p>
 
             <ToggleField
               label="Show Upcoming Events button"
@@ -167,6 +261,49 @@ export default function UpcomingEventsSettings() {
                   onChange={(event) => setField({ target: { name: "open_new_tab", type: "checkbox", checked: event.target.checked } })}
                   disabled={loading || saving}
                 />
+              </div>
+
+              <div className="wm-field full">
+                <label htmlFor="upcoming-event-images">Event images</label>
+                <input
+                  id="upcoming-event-images"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={addNewImages}
+                  disabled={loading || saving || !canEditSettings}
+                />
+                <small>Upload up to 10 JPG, PNG, or WebP images, up to 5 MB each. Removing an image hides it from the carousel but keeps its file in storage.</small>
+                {(form.images.length > 0 || newImages.length > 0) ? (
+                  <div className="wm-event-image-grid">
+                    {form.images.map((image, index) => (
+                      <div className="wm-event-image" key={image.path || image.url}>
+                        <img src={image.url} alt={`Upcoming event ${index + 1}`} />
+                        <button
+                          type="button"
+                          onClick={() => removeSavedImage(index)}
+                          disabled={loading || saving || !canEditSettings}
+                          aria-label={`Remove saved image ${index + 1}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    {newImages.map((image, index) => (
+                      <div className="wm-event-image" key={image.preview}>
+                        <img src={image.preview} alt={`New upcoming event ${index + 1}`} />
+                        <button
+                          type="button"
+                          onClick={() => removeNewImage(index)}
+                          disabled={loading || saving}
+                          aria-label={`Remove selected image ${index + 1}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 

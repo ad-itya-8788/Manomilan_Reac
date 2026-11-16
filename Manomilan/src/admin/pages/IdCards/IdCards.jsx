@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgeCheck,
   ChevronDown,
@@ -17,11 +17,12 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import AdminLayout from "../../components/AdminLayout.jsx";
 import AdminPagination from "../../components/AdminPagination.jsx";
 import AdminStats from "../../components/AdminStats.jsx";
 import useDebouncedValue from "../../hooks/useDebouncedValue";
-import { useAdminPermission } from "../../../permission-context.jsx";
+import { AdminPermissionContext, useAdminPermission } from "../../../permission-context.jsx";
 import { apiMediaUrl, apiUrl, getProfilePhoto, request } from "../../../api";
 import BioDataModal from "../Profiles/BioDataModal.jsx";
 import IdCardDesigner from "./IdCardDesigner.jsx";
@@ -30,7 +31,7 @@ import IdCardPreview from "./IdCardPreview.jsx";
 import "../../components/admin-ui.css";
 import "./idCards.css";
 
-const MAX_BATCH_PRINT = 100;
+const MAX_BATCH_PRINT = 1000;
 const AGES = Array.from({ length: 103 }, (_, index) => index + 18);
 const PREFIX_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-?$/;
 const PREVIEW_LIMIT = 50;
@@ -820,8 +821,12 @@ function IdCardPreviewModal({ card, settings, onClose, onPrint, onDownload }) {
 /* -------------------------------------------------------------------------- */
 /*  Main screen                                                               */
 /* -------------------------------------------------------------------------- */
-function IdCardCandidates({ settings }) {
+function IdCardCandidates({ settings, allowGeneration = false, source = "melava" }) {
+  const access = useContext(AdminPermissionContext);
+  const hasGenerationPermission = useAdminPermission("create", null, "id_card_generation");
+  const canGenerateIds = Boolean(source === "melava" && allowGeneration && access?.is_super_admin && hasGenerationPermission);
   const canExportBiodata = useAdminPermission("export", null, "admin_side_profile");
+  const candidatesEndpoint = source === "profiles" ? "/id-cards/all-candidates" : "/id-cards/candidates";
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState({ total: 0, assigned: 0, unassigned: 0 });
   const [ageGroups, setAgeGroups] = useState([]);
@@ -905,7 +910,7 @@ function IdCardCandidates({ settings }) {
     setError("");
     try {
       const params = buildParams({ per_page: "20", page: String(page) });
-      const response = await request(`/id-cards/candidates?${params.toString()}`);
+      const response = await request(`${candidatesEndpoint}?${params.toString()}`);
       if (id !== requestId.current) return;
       setRows(Array.isArray(response?.data?.data) ? response.data.data : []);
       setPagination(response?.data || null);
@@ -916,7 +921,7 @@ function IdCardCandidates({ settings }) {
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [buildParams, dateError, page]);
+  }, [buildParams, candidatesEndpoint, dateError, page]);
 
   useEffect(() => {
     const timer = window.setTimeout(load, 0);
@@ -1018,7 +1023,7 @@ function IdCardCandidates({ settings }) {
     setError("");
     try {
       const params = buildParams({ ids_only: "1" });
-      const response = await request(`/id-cards/candidates?${params.toString()}`);
+      const response = await request(`${candidatesEndpoint}?${params.toString()}`);
       const ids = Array.isArray(response?.data) ? response.data : [];
       setSelected(new Set(ids));
       setToast({ type: "success", message: `${ids.length} candidate${ids.length === 1 ? "" : "s"} selected.` });
@@ -1031,7 +1036,12 @@ function IdCardCandidates({ settings }) {
 
   const fetchCards = async (ids) => {
     const params = new URLSearchParams();
-    ids.forEach((id) => params.append("ids[]", String(id)));
+    params.set("ids", ids.join(","));
+    if (source === "profiles") {
+      params.set("per_page", String(ids.length));
+      const response = await request(`${candidatesEndpoint}?${params.toString()}`);
+      return Array.isArray(response?.data?.data) ? response.data.data : [];
+    }
     const response = await request(`/id-cards/cards?${params.toString()}`);
     return Array.isArray(response?.data) ? response.data : [];
   };
@@ -1159,16 +1169,18 @@ function IdCardCandidates({ settings }) {
           <span>Select candidates to print cards.</span>
         </div>
         <div className="idc-actionbar-buttons">
-          <button
-            type="button"
-            className="ui-btn small secondary is-primary"
-            onClick={toggleAssignment}
-            aria-expanded={assignmentOpen}
-            aria-controls="idc-assignment-panel"
-          >
-            <Hash size={14} /> Generate IDs
-            <ChevronDown size={14} className={`idcx-toggle-chevron ${assignmentOpen ? "is-open" : ""}`} />
-          </button>
+          {canGenerateIds ? (
+            <button
+              type="button"
+              className="ui-btn small secondary is-primary"
+              onClick={toggleAssignment}
+              aria-expanded={assignmentOpen}
+              aria-controls="idc-assignment-panel"
+            >
+              <Hash size={14} /> Generate IDs
+              <ChevronDown size={14} className={`idcx-toggle-chevron ${assignmentOpen ? "is-open" : ""}`} />
+            </button>
+          ) : null}
           {selected.size ? (
             <button type="button" className="ui-btn small secondary" onClick={() => setSelected(new Set())}>
               <X size={14} /> Clear
@@ -1193,24 +1205,26 @@ function IdCardCandidates({ settings }) {
       </div>
 
       {/* Hidden by default - springs open when "Generate IDs" is clicked */}
-      <div
-        id="idc-assignment-panel"
-        className={`idcx-collapse ${assignmentOpen ? "is-open" : ""}`}
-        aria-hidden={!assignmentOpen}
-      >
-        <div className="idcx-collapse-inner">
-          {panelMounted ? (
-            <IdCardAssignmentPanel
-              onAssigned={() => {
-                setSelected(new Set());
-                load();
-                setToast({ type: "success", message: "Unique numbers generated successfully." });
-              }}
-              onClose={closeAssignment}
-            />
-          ) : null}
+      {canGenerateIds ? (
+        <div
+          id="idc-assignment-panel"
+          className={`idcx-collapse ${assignmentOpen ? "is-open" : ""}`}
+          aria-hidden={!assignmentOpen}
+        >
+          <div className="idcx-collapse-inner">
+            {panelMounted ? (
+              <IdCardAssignmentPanel
+                onAssigned={() => {
+                  setSelected(new Set());
+                  load();
+                  setToast({ type: "success", message: "Unique numbers generated successfully." });
+                }}
+                onClose={closeAssignment}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <AdminStats items={statItems} loading={loading && !pagination} label="ID card candidate statistics" />
 
@@ -1344,6 +1358,10 @@ function IdCardCandidates({ settings }) {
               {rows.map((row, index) => {
                 const photo = apiMediaUrl(getProfilePhoto(row, ["photo_url", "profile_photo_url", "profile_photo"]));
                 const isSelected = selected.has(row.id);
+                const rowNumber = (pagination?.from || 1) + index;
+                const profileDetailsUrl = row.profile_id
+                  ? `/admin/profiles/${row.profile_id}/details?sr_no=${rowNumber}`
+                  : null;
                 return (
                   <tr key={row.id} className={isSelected ? "is-selected" : ""}>
                     <td className="idc-check-col" data-label="">
@@ -1357,12 +1375,28 @@ function IdCardCandidates({ settings }) {
                     <td className="idc-cell-person" data-label="">
                       <div className="ui-person">
                         {photo ? (
-                          <span className="ui-avatar"><img src={photo} alt="" loading="lazy" /></span>
+                          profileDetailsUrl ? (
+                            <Link to={profileDetailsUrl} className="ui-avatar" aria-label={`View profile of ${row.full_name || "candidate"}`}>
+                              <img src={photo} alt="" loading="lazy" />
+                            </Link>
+                          ) : (
+                            <span className="ui-avatar"><img src={photo} alt="" loading="lazy" /></span>
+                          )
                         ) : (
-                          <span className="ui-avatar">{initials(row.full_name)}</span>
+                          profileDetailsUrl ? (
+                            <Link to={profileDetailsUrl} className="ui-avatar" aria-label={`View profile of ${row.full_name || "candidate"}`}>
+                              {initials(row.full_name)}
+                            </Link>
+                          ) : (
+                            <span className="ui-avatar">{initials(row.full_name)}</span>
+                          )
                         )}
                         <span className="ui-person-text">
-                          <strong>{row.full_name || "Unnamed candidate"}</strong>
+                          <strong>
+                            {profileDetailsUrl ? (
+                              <Link className="ui-link" to={profileDetailsUrl}>{row.full_name || "Unnamed candidate"}</Link>
+                            ) : row.full_name || "Unnamed candidate"}
+                          </strong>
                           <small>{row.mobile || "Mobile unavailable"}</small>
                           <small>{row.registration_number || "No registration number"}</small>
                         </span>
@@ -1461,7 +1495,8 @@ function IdCardCandidates({ settings }) {
   );
 }
 
-export default function IdCards() {
+export default function IdCards({ currentPath = "/admin/id-generation", mode = "generation" }) {
+  const isPrinter = mode === "printer";
   const [view, setView] = useState("candidates");
   const [settings, setSettings] = useState(FALLBACK_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -1526,27 +1561,64 @@ export default function IdCards() {
   };
 
   return (
-    <AdminLayout currentPath="/admin/id-cards">
+    <AdminLayout currentPath={currentPath}>
       <div className="adm-ui idc-page">
         <div className="ui-head">
           <div>
-            <h1>ID Cards</h1>
-            <p>Assign unique IDs, design reusable cards, print them, and open candidate Bio Data.</p>
+            <h1>{isPrinter ? "ID Printer" : "ID Generation"}</h1>
+            <p>
+              {isPrinter
+                ? "Search candidates, preview ID cards, view Bio Data, and print or download cards."
+                : "Generate unique candidate IDs and manage the reusable card design."}
+            </p>
           </div>
           <div className="ui-head-actions">
             <button type="button" className="ui-btn secondary" onClick={loadDesign} disabled={loading}>
-              <RefreshCw size={16} className={loading ? "ui-spin" : ""} /> Refresh
-            </button>
-            <button
-              type="button"
-              className={`ui-btn ${view === "design" ? "" : "secondary"}`}
-              onClick={() => setView(view === "design" ? "candidates" : "design")}
-            >
-              {view === "design" ? <Users size={16} /> : <LayoutTemplate size={16} />}
-              {view === "design" ? "Candidates" : "Card design"}
+              <RefreshCw size={16} className={loading ? "ui-spin" : ""} /> Refresh design
             </button>
           </div>
         </div>
+
+        <div className={`idc-view-tabs ${isPrinter ? "is-printer-tabs" : ""}`} role="group" aria-label="ID Cards sections">
+            <button
+              type="button"
+              className={`idc-view-tab ${view === "candidates" ? "is-active" : ""}`}
+              aria-pressed={view === "candidates"}
+              onClick={() => setView("candidates")}
+            >
+              <Users size={20} aria-hidden="true" />
+              <span className="idc-view-tab-copy">
+                <strong>Melava Candidates &amp; Cards</strong>
+                <small>Search Melava registrations, view ID cards, and open Bio Data.</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`idc-view-tab ${view === "all-candidates" ? "is-active" : ""}`}
+              aria-pressed={view === "all-candidates"}
+              onClick={() => setView("all-candidates")}
+            >
+              <Search size={20} aria-hidden="true" />
+              <span className="idc-view-tab-copy">
+                <strong>All Candidates</strong>
+                <small>Search every profile; cards without a Melava ID keep that field blank.</small>
+              </span>
+            </button>
+            {!isPrinter ? (
+              <button
+                type="button"
+                className={`idc-view-tab ${view === "design" ? "is-active" : ""}`}
+                aria-pressed={view === "design"}
+                onClick={() => setView("design")}
+              >
+                <LayoutTemplate size={20} aria-hidden="true" />
+                <span className="idc-view-tab-copy">
+                  <strong>Card Design</strong>
+                  <small>Customize the reusable candidate ID card layout.</small>
+                </span>
+              </button>
+            ) : null}
+          </div>
 
         {error ? (
           <div className="ui-alert" role="alert">
@@ -1555,7 +1627,7 @@ export default function IdCards() {
           </div>
         ) : null}
 
-        {view === "design" ? (
+        {!isPrinter && view === "design" ? (
           <IdCardDesigner
             settings={settings}
             onChange={setSettings}
@@ -1564,7 +1636,11 @@ export default function IdCards() {
             saving={saving}
           />
         ) : (
-          <IdCardCandidates settings={settings} />
+          <IdCardCandidates
+            settings={settings}
+            allowGeneration={!isPrinter && view === "candidates"}
+            source={view === "all-candidates" ? "profiles" : "melava"}
+          />
         )}
       </div>
 

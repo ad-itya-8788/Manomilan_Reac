@@ -7,11 +7,13 @@ import {
   FileText,
   Globe,
   GraduationCap,
+  Hash,
   HeartHandshake,
   IdCard,
   KeyRound,
   LayoutDashboard,
   LogOut,
+  Printer,
   Settings,
   ShieldAlert,
   Ticket,
@@ -38,6 +40,8 @@ const ICONS = {
   "/admin/unverified-profiles": ShieldAlert,
   "/admin/melava": CalendarHeart,
   "/admin/melava-campaigns": CalendarPlus,
+  "/admin/id-generation": Hash,
+  "/admin/id-printer": Printer,
   "/admin/id-cards": IdCard,
   "/admin/workshop-events": GraduationCap,
   "/admin/workshop": GraduationCap,
@@ -58,6 +62,8 @@ const ICON_COLORS = {
   "/admin/unverified-profiles": "#f97316",
   "/admin/melava": "#ec4899",
   "/admin/melava-campaigns": "#e11d48",
+  "/admin/id-generation": "#0f766e",
+  "/admin/id-printer": "#0e7490",
   "/admin/id-cards": "#0f766e",
   "/admin/workshop-events": "#b70650",
   "/admin/workshop": "#7c3aed",
@@ -72,7 +78,10 @@ const ICON_COLORS = {
 export default function Sidebar({ currentPath, onNavigate }) {
   const access = useContext(AdminPermissionContext);
   const items = [...menuItems, SYSTEM_MANAGEMENT];
-  const visibleItems = items.filter((item) => hasModulePermission(access, "view", item.path));
+  const visibleItems = items.filter((item) =>
+    (!item.requiresSuperAdmin || access?.is_super_admin)
+    && hasModulePermission(access, "view", item.path)
+  );
   const activePath = visibleItems.reduce((active, item) => {
     const matches =
       currentPath === item.path ||

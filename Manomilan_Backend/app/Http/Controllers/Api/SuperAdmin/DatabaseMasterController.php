@@ -172,6 +172,53 @@ class DatabaseMasterController extends Controller
         ]);
     }
 
+    public function updateTableRecord(Request $request, string $table): JsonResponse
+    {
+        $data = $request->validate([
+            'primary_key' => ['required', 'string', 'max:64'],
+            'record_key' => ['required', 'string', 'max:255'],
+            'values' => ['required', 'array', 'min:1', 'max:50'],
+            'values.*' => ['nullable'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Database record updated.',
+            'data' => $this->databaseMaster->updateTableRecord(
+                $table,
+                $data['primary_key'],
+                $data['record_key'],
+                $data['values'],
+                $request->user()
+            ),
+        ]);
+    }
+
+    public function deleteTableRecord(Request $request, string $table): JsonResponse
+    {
+        $data = $request->validate([
+            'primary_key' => ['required', 'string', 'max:64'],
+            'record_key' => ['required', 'string', 'max:255'],
+            'confirm_table' => ['required', 'string', 'max:64'],
+        ]);
+        if (! hash_equals($table, $data['confirm_table'])) {
+            throw ValidationException::withMessages([
+                'confirm_table' => 'Type the exact table name to confirm this permanent deletion.',
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Database record permanently deleted.',
+            'data' => $this->databaseMaster->deleteTableRecord(
+                $table,
+                $data['primary_key'],
+                $data['record_key'],
+                $request->user()
+            ),
+        ]);
+    }
+
     public function audit(Request $request): JsonResponse
     {
         $data = $request->validate([

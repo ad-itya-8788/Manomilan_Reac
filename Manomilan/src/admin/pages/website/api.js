@@ -11,8 +11,13 @@ export const getWebsiteOverview = () => request("/website-management/overview");
 
 export const getUpcomingEventsSettings = () => request("/website-management/upcoming-events");
 
-export const saveUpcomingEventsSettings = (body) =>
-  saved(request("/website-management/upcoming-events", { method: "PUT", body }));
+export const saveUpcomingEventsSettings = (body) => {
+  const isMultipart = body instanceof FormData;
+  return saved(request("/website-management/upcoming-events", {
+    method: isMultipart ? "POST" : "PUT",
+    body,
+  }));
+};
 
 export const getDowntimeSettings = () => request("/website-management/downtime");
 

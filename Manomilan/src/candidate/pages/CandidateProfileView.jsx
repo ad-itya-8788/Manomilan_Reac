@@ -247,7 +247,7 @@ export default function CandidateProfileView({ params = {} }) {
                 disabled={Boolean(candidate.interest_id) || interestBusy}
               >
                 {interestBusy ? <Loader2 size={17} className="cnd-spin" /> : <Heart size={17} />}
-                {candidate.interest_id ? "Interest sent" : "Send interest"}
+                {candidate.interest_id ? "Interest sent" : "Send Interest"}
               </button>
             </section>
 

@@ -631,7 +631,7 @@ export default function MelavaCampaigns() {
             </p>
             <div className="mc-dialog-actions">
               <button type="button" className="ui-btn secondary" onClick={() => setDeleteTarget(null)} disabled={busyId !== null}>Cancel</button>
-              <button type="button" className="ui-btn danger" onClick={deleteCampaign} disabled={busyId !== null}>
+              <button type="button" className="ui-btn mc-delete-event" onClick={deleteCampaign} disabled={busyId !== null}>
                 {busyId !== null ? "Deleting…" : "Delete event"}
               </button>
             </div>

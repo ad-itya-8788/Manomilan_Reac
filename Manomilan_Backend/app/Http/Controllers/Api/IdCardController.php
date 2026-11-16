@@ -81,6 +81,64 @@ class IdCardController extends Controller
         ]);
     }
 
+    public function allCandidates(Request $request)
+    {
+        if (! $this->isAdmin($request)) {
+            return $this->forbidden();
+        }
+
+        $filters = $this->validateCandidateFilters($request);
+        $settings = $this->templateSettings();
+        $query = $this->allCandidateQuery($filters, $settings);
+
+        if ($request->boolean('ids_only')) {
+            $ids = (clone $query)
+                ->orderByDesc('profiles.created_at')
+                ->orderByDesc('profiles.id')
+                ->limit(5000)
+                ->pluck('profiles.id')
+                ->map(fn ($id) => (int) $id)
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'data' => $ids,
+                'total' => $ids->count(),
+            ]);
+        }
+
+        $statsRows = (clone $query)
+            ->reorder()
+            ->select(['profiles.id', 'id_card_registration.unique_id_number']);
+        $stats = DB::query()
+            ->fromSub($statsRows->toBase(), 'filtered_candidates')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN unique_id_number IS NOT NULL THEN 1 ELSE 0 END) as assigned')
+            ->selectRaw('SUM(CASE WHEN unique_id_number IS NULL THEN 1 ELSE 0 END) as unassigned')
+            ->first();
+
+        $perPage = (int) ($filters['per_page'] ?? 20);
+        $page = (int) ($filters['page'] ?? 1);
+        $profiles = $query
+            ->orderByDesc('profiles.created_at')
+            ->orderByDesc('profiles.id')
+            ->paginate($perPage, ['*'], 'page', $page);
+        $profiles->getCollection()->transform(
+            fn (Profile $profile) => $this->presentAllCandidate($profile, $settings, $request)
+        );
+
+        return response()->json([
+            'success' => true,
+            'data' => $profiles,
+            'stats' => [
+                'total' => (int) ($stats->total ?? 0),
+                'assigned' => (int) ($stats->assigned ?? 0),
+                'unassigned' => (int) ($stats->unassigned ?? 0),
+            ],
+            'age_groups' => $settings['ageGroups'] ?? [],
+        ]);
+    }
+
     public function cards(Request $request)
     {
         if (! $this->isAdmin($request)) {
@@ -396,7 +454,7 @@ class IdCardController extends Controller
             'assigned' => ['nullable', Rule::in(['all', 'assigned', 'unassigned'])],
             'campaign_id' => ['nullable', 'integer', 'exists:melava_campaigns,id'],
             'ids' => ['nullable'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
     }
@@ -501,6 +559,94 @@ class IdCardController extends Controller
         $ids = $this->parseIds($filters['ids'] ?? null);
         if ($ids !== []) {
             $query->whereIn('profile_melava_registrations.id', $ids);
+        }
+
+        return $query;
+    }
+
+    private function allCandidateQuery(array $filters, array $settings)
+    {
+        $preferredRegistration = DB::table('profile_melava_registrations as pmr')
+            ->leftJoin('melava_campaigns as mc', 'mc.id', '=', 'pmr.melava_campaign_id')
+            ->select([
+                'pmr.profile_id',
+                'pmr.unique_id_number',
+                'pmr.melava_campaign_id',
+                'mc.title as campaign_title',
+                'mc.melava_code as campaign_code',
+            ])
+            ->whereRaw('pmr.id = (
+                SELECT pmr_preferred.id
+                FROM profile_melava_registrations AS pmr_preferred
+                WHERE pmr_preferred.profile_id = pmr.profile_id
+                ORDER BY (pmr_preferred.unique_id_number IS NOT NULL) DESC, pmr_preferred.id DESC
+                LIMIT 1
+            )');
+
+        $query = Profile::query()
+            ->leftJoinSub($preferredRegistration, 'id_card_registration', function ($join): void {
+                $join->on('id_card_registration.profile_id', '=', 'profiles.id');
+            })
+            ->select([
+                'profiles.*',
+                'id_card_registration.unique_id_number as id_card_unique_id_number',
+                'id_card_registration.melava_campaign_id as id_card_campaign_id',
+                'id_card_registration.campaign_title as id_card_campaign_title',
+                'id_card_registration.campaign_code as id_card_campaign_code',
+            ]);
+
+        $search = trim((string) ($filters['q'] ?? ''));
+        if ($search !== '') {
+            $query->where(function ($nested) use ($search): void {
+                $nested->where('profiles.full_name', 'like', "%{$search}%")
+                    ->orWhere('profiles.reg_id', 'like', "%{$search}%")
+                    ->orWhere('profiles.phone', 'like', "%{$search}%")
+                    ->orWhere('id_card_registration.unique_id_number', 'like', "%{$search}%");
+            });
+        }
+
+        if (! empty($filters['unique_id'])) {
+            $query->where('id_card_registration.unique_id_number', 'like', '%'.trim((string) $filters['unique_id']).'%');
+        }
+
+        if (! empty($filters['mobile'])) {
+            $query->where('profiles.phone', 'like', '%'.trim((string) $filters['mobile']).'%');
+        }
+
+        if (! empty($filters['gender'])) {
+            $query->whereRaw('LOWER(profiles.groomorbride) = ?', [$filters['gender']]);
+        }
+
+        if (! empty($filters['marital_status'])) {
+            $query->whereRaw('LOWER(TRIM(profiles.marital_status)) = ?', [strtolower($filters['marital_status'])]);
+        }
+
+        $ageRange = $this->resolveAgeRange($settings, $filters['age_group'] ?? null);
+        if ($ageRange) {
+            $query->whereNotNull('profiles.birth_date')
+                ->whereRaw('TIMESTAMPDIFF(YEAR, profiles.birth_date, CURDATE()) BETWEEN ? AND ?', $ageRange);
+        }
+
+        if (! empty($filters['date_from'])) {
+            $query->where('profiles.created_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());
+        }
+        if (! empty($filters['date_to'])) {
+            $query->where('profiles.created_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
+        }
+
+        if (($filters['assigned'] ?? 'all') === 'assigned') {
+            $query->whereNotNull('id_card_registration.unique_id_number');
+        } elseif (($filters['assigned'] ?? 'all') === 'unassigned') {
+            $query->whereNull('id_card_registration.unique_id_number');
+        }
+
+        if (! empty($filters['campaign_id'])) {
+            $query->where('id_card_registration.melava_campaign_id', (int) $filters['campaign_id']);
+        }
+
+        $ids = $this->parseIds($filters['ids'] ?? null);
+        if ($ids !== []) {
+            $query->whereIn('profiles.id', $ids);
         }
 
         return $query;
@@ -666,6 +812,42 @@ class IdCardController extends Controller
             'photo_proxy_path' => $photoFile ? '/id-cards/photo/'.$registration->profile_id : '',
             'photo_proxy_url' => $photoFile
                 ? rtrim($request->getSchemeAndHttpHost(), '/').'/api/id-cards/photo/'.$registration->profile_id
+                : '',
+        ];
+    }
+
+    private function presentAllCandidate(Profile $profile, array $settings, Request $request): array
+    {
+        $birthDate = $profile->birth_date;
+        $age = $birthDate ? Carbon::parse($birthDate)->age : null;
+        $group = $this->ageGroupFor($age, $settings);
+        $photoPath = $this->profilePhotoPath($profile);
+        $photoFile = $photoPath ? $this->localUploadPath($photoPath) : null;
+        $uniqueId = $profile->id_card_unique_id_number;
+
+        return [
+            'id' => (int) $profile->id,
+            'profile_id' => (int) $profile->id,
+            'full_name' => $profile->full_name,
+            'registration_number' => $profile->reg_id,
+            'unique_id_number' => $uniqueId,
+            'blank_id_when_unassigned' => true,
+            'assigned' => $uniqueId !== null,
+            'age' => $age,
+            'age_group' => $group['code'] ?? null,
+            'age_group_label' => $group['label'] ?? null,
+            'gender' => $profile->groomorbride,
+            'mobile' => $profile->phone,
+            'email' => $profile->email,
+            'birth_date' => $birthDate ? Carbon::parse($birthDate)->format('Y-m-d') : null,
+            'registration_date' => $profile->created_at?->format(DATE_ATOM),
+            'city' => data_get($profile->addresses, 'current.city'),
+            'campaign_code' => $profile->id_card_campaign_code,
+            'campaign_title' => $profile->id_card_campaign_title,
+            'photo_url' => $photoPath ? $this->fileUrl($photoPath) : '',
+            'photo_proxy_path' => $photoFile ? '/id-cards/photo/'.$profile->id : '',
+            'photo_proxy_url' => $photoFile
+                ? rtrim($request->getSchemeAndHttpHost(), '/').'/api/id-cards/photo/'.$profile->id
                 : '',
         ];
     }

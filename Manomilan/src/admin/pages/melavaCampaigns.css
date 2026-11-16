@@ -491,6 +491,13 @@
   gap: 8px;
 }
 
+.mc-dialog-actions .mc-delete-event {
+  display: inline-flex;
+  flex: 0 0 auto;
+  background: #c0362c;
+  color: #fff;
+}
+
 .mc-dialog-close {
   position: absolute;
   top: 14px;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../api";
 
 export default function MelavaBanner() {
@@ -37,12 +38,12 @@ export default function MelavaBanner() {
                 </p>
               </div>
               <div className="melava-banner-actions">
-                <a
-                  href={`/melava-registration?campaign=${campaign.id}`}
+                <Link
+                  to={`/melava-registration?campaign=${campaign.id}`}
                   className="btn melava-banner-btn"
                 >
                   Register for this Melava <i className="bi bi-arrow-right" />
-                </a>
+                </Link>
                 <span>
                   Fee {new Intl.NumberFormat("en-IN", {
                     style: "currency",

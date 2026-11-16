@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy } from "lucide-react";
+import { Link } from "react-router-dom";
 import { apiMediaUrl, request } from "../api";
 import { getSession, isAdminRole } from "../auth";
 import { SUBCASTES } from "../data/casteOptions";
@@ -2923,7 +2924,7 @@ export default function MelavaRegistration() {
               <div className="al ok">Your existing website account has been linked to this Melava registration.</div>
             )}
             <div className="actions">
-              <a href="/login" className="btn p">Go to login</a>
+              <Link to="/login" className="btn p">Go to login</Link>
               {pdfData ? (
                 <button type="button" className="btn g" disabled={pdfDownloading} onClick={() => downloadCurrentPdf(pdfData)}>
                   {pdfDownloading ? "Preparing PDF..." : `${ICONS.pdf} Download PDF`}

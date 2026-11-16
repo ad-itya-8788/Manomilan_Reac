@@ -11,6 +11,7 @@ import { AdminPermissionContext, hasModulePermission } from "./permission-contex
 import { invalidateCandidateProfileCache } from "./candidate/api.js";
 import { ProfileCompletionContext } from "./candidate/profile-completion-context.jsx";
 import { getPublicWebsiteSettings } from "./website/api.js";
+import WebsiteUpcomingEvents from "./website/WebsiteUpcomingEvents.jsx";
 
 const Home = lazy(() => import("./pages/Home.jsx"));
 const About = lazy(() => import("./pages/About.jsx"));
@@ -18,6 +19,7 @@ const HowItWorks = lazy(() => import("./pages/HowItWorks.jsx"));
 const SuccessStories = lazy(() => import("./pages/SuccessStories.jsx"));
 const OurServices = lazy(() => import("./pages/OurServices.jsx"));
 const ContactUs = lazy(() => import("./pages/ContactUs.jsx"));
+const FAQ = lazy(() => import("./pages/FAQ.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword.jsx"));
 const MelavaRegistration = lazy(() => import("./pages/MelavaRegistration.jsx"));
@@ -39,6 +41,12 @@ const WorkshopRegistrations = lazy(() => import("./admin/pages/WorkshopRegistrat
 const MelavaBioDataPage = lazy(() => import("./admin/pages/MelavaBioDataPage.jsx"));
 const MelavaCampaigns = lazy(() => import("./admin/pages/MelavaCampaigns.jsx"));
 const IdCards = lazy(() => import("./admin/pages/IdCards/IdCards.jsx"));
+const IdGeneration = (props) => (
+  <IdCards {...props} currentPath="/admin/id-generation" mode="generation" />
+);
+const IdPrinter = (props) => (
+  <IdCards {...props} currentPath="/admin/id-printer" mode="printer" />
+);
 const WorkshopEvents = lazy(() => import("./admin/pages/workshopEvents/WorkshopEvents.jsx"));
 const Reports = lazy(() => import("./admin/pages/Reports.jsx"));
 const ResetPasswords = lazy(() => import("./admin/pages/ResetPasswords.jsx"));
@@ -67,6 +75,7 @@ const ROUTES = {
   "/success-stories": SuccessStories,
   "/our-services": OurServices,
   "/contactus": ContactUs,
+  "/faq": FAQ,
 
   "/login": Login,
   "/register": Login,
@@ -94,7 +103,9 @@ const ROUTES = {
   "/admin/melava": MelavaPayments,
   "/admin/workshop": WorkshopRegistrations,
   "/admin/melava-campaigns": MelavaCampaigns,
-  "/admin/id-cards": IdCards,
+  "/admin/id-generation": IdGeneration,
+  "/admin/id-printer": IdPrinter,
+  "/admin/id-cards": IdPrinter,
   "/admin/workshop-events": WorkshopEvents,
   "/admin/reset-passwords": ResetPasswords,
   "/admin/report": Reports,
@@ -147,6 +158,7 @@ const SUPER_ADMIN_PERMISSIONS = { is_super_admin: true, modules: [] };
 const ADMIN_ROUTE_PERMISSIONS = [
   { pattern: /^\/admin\/profiles\/edit\//, moduleKey: "admin_side_profile", permission: "edit" },
   { pattern: /^\/admin\/melava-biodata\//, moduleKey: "admin_side_profile", permission: "export" },
+  { pattern: /^\/admin\/id-generation$/, moduleKey: "id_card_generation", permission: "view" },
   { pattern: /^\/admin\/profiles\/payment\//, moduleKey: "payments_verification", permission: "view" },
   { pattern: /^\/admin\/profiles\/receipt\//, moduleKey: "payments_verification", permission: "export" },
   { pattern: /^\/admin\/software-tickets\/\d+\/edit$/, moduleKey: "software_ticket_module", permission: "edit" },
@@ -347,6 +359,11 @@ export default function App() {
   const isWorkshopRegistration = path === "/workshop-registration";
   const isMaintenancePath = path === "/maintenance";
   const isPublicPath = !isAdminPath && !isCandidatePath && path !== "/login" && !isMaintenancePath;
+  const showPublicUpcomingEvents = !isAdminPath
+    && !isCandidatePath
+    && !path.startsWith("/melava-registration")
+    && !path.startsWith("/workshop-registration")
+    && !isMaintenancePath;
   const maintenanceActive = Boolean(websiteSettings?.maintenance?.active);
 
   // Only admin and candidate pages require an authenticated session.
@@ -382,7 +399,8 @@ export default function App() {
     loggedIn &&
     !isChangePasswordPath &&
     (
-      session.role === "admin" && adminPermissions !== null && !permittedAdminRoute
+      (path === "/admin/id-generation" && !isSuperAdmin)
+      || (session.role === "admin" && adminPermissions !== null && !permittedAdminRoute)
     );
   const adminPermissionsPending = isAdminPath
     && loggedIn
@@ -501,6 +519,7 @@ export default function App() {
         </AdminPermissionContext.Provider>
       ) : <ComingSoon path={path} />}
       {showChrome && <Footer />}
+      {showPublicUpcomingEvents && <WebsiteUpcomingEvents />}
       {showMobileBottomNavigation && <MobileBottomNavigation />}
     </>
   );

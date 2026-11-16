@@ -224,7 +224,13 @@ export default function IdCardPreview({
   const fields = [];
 
   if (show("showName")) fields.push({ key: "name", label: "Name", value: valueOrDash(candidate.full_name), icon: UserRound, strong: true });
-  if (show("showUniqueId")) fields.push({ key: "uniqueId", label: "ID No.", value: valueOrDash(candidate.unique_id_number), icon: IdCard, id: true });
+  if (show("showUniqueId")) fields.push({
+    key: "uniqueId",
+    label: "ID No.",
+    value: candidate.blank_id_when_unassigned && !candidate.unique_id_number ? "" : valueOrDash(candidate.unique_id_number),
+    icon: IdCard,
+    id: true,
+  });
   if (show("showDob")) fields.push({ key: "dob", label: "Date of Birth", value: valueOrDash(formatDate(candidate.birth_date)), icon: CalendarDays });
   if (show("showAgeGroup")) fields.push({ key: "ageGroup", label: "Age Group", value: valueOrDash(candidate.age_group_label || candidate.age_group), icon: UsersRound });
   if (show("showGender")) fields.push({ key: "gender", label: "Gender", value: valueOrDash(candidate.gender || candidate.groomorbride), icon: Venus });

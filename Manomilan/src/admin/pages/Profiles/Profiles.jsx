@@ -70,15 +70,15 @@ async function exportProfiles(params) {
 const initials = (name = "") =>
   name.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
-function Avatar({ p, onOpen }) {
+function Avatar({ p, to }) {
   const [broken, setBroken] = useState(false);
   const photoSrc = apiMediaUrl(getProfilePhoto(p, ["photo_url", "photo", "profile_photo", "image"]));
-  if (!photoSrc || broken)
-    return <div className="ui-avatar" aria-hidden="true">{initials(p.full_name)}</div>;
   return (
-    <button type="button" className="ui-avatar ui-avatar-btn" onClick={() => onOpen({ ...p, photo_url: photoSrc })} aria-label={`View photo of ${p.full_name}`}>
-      <img src={photoSrc} alt="" loading="lazy" onError={() => setBroken(true)} />
-    </button>
+    <Link className="ui-avatar" to={to} aria-label={`View profile of ${p.full_name || "candidate"}`}>
+      {photoSrc && !broken
+        ? <img src={photoSrc} alt="" loading="lazy" onError={() => setBroken(true)} />
+        : initials(p.full_name)}
+    </Link>
   );
 }
 
@@ -110,6 +110,8 @@ export default function Profiles() {
         : undefined;
   const isNriView = currentPath === "/admin/nri-profiles";
   const isInactiveView = currentPath === "/admin/inactive-profiles";
+  const isVerificationView = currentPath === "/admin/unverified-profiles"
+    || currentPath === "/admin/verified-profiles";
 
   const [filters, setFilters] = useState({ gender: "all", marital_status: "", country: "" });
   const [search, setSearch] = useState("");
@@ -122,7 +124,6 @@ export default function Profiles() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [photo, setPhoto] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -222,7 +223,7 @@ export default function Profiles() {
   }, [load]);
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === "Escape") { setPhoto(null); setConfirm(null); } };
+    const onKey = (e) => { if (e.key === "Escape") setConfirm(null); };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
@@ -480,7 +481,7 @@ export default function Profiles() {
                       <tr key={p.id}>
                         <td className="ui-muted">{rowNumber}</td>
                         <td><span className="ui-chip">{p.registration_number}</span></td>
-                        <td><Avatar p={p} onOpen={setPhoto} /></td>
+                        <td><Avatar p={p} to={LINKS.view(p.id, rowNumber)} /></td>
                         <td>
                           <Link className="ui-link" to={LINKS.view(p.id, rowNumber)}>{p.full_name}</Link>
                           <RecordEditorName record={p} />
@@ -495,12 +496,12 @@ export default function Profiles() {
                         </td>
                         <td>
                           <div className="ui-actions">
-                            {currentPath === "/admin/unverified-profiles" ? (
+                            {isVerificationView ? (
                               <Link
-                                to={`/admin/unverified-profiles/${p.id}/verify`}
+                                to={`/admin/unverified-profiles/${p.id}/verify${currentPath === "/admin/verified-profiles" ? "?from=verified" : ""}`}
                                 className="ui-icon-btn teal"
-                                title="View and verify documents"
-                                aria-label={`View and verify documents for ${p.full_name}`}
+                                title={currentPath === "/admin/verified-profiles" ? "Review or change document verification" : "View and verify documents"}
+                                aria-label={`${currentPath === "/admin/verified-profiles" ? "Review or change" : "View and verify"} documents for ${p.full_name}`}
                               >
                                 <FileCheck2 size={15} />
                               </Link>
@@ -566,16 +567,6 @@ export default function Profiles() {
             />
           )}
         </div>
-
-        {photo && (
-          <div className="pf-modal" onClick={() => setPhoto(null)}>
-            <div className="pf-lightbox" onClick={(e) => e.stopPropagation()}>
-              <button type="button" className="pf-close" onClick={() => setPhoto(null)} aria-label="Close"><X size={20} /></button>
-              <img src={apiMediaUrl(photo.photo_url || photo.photo || photo.profile_photo)} alt={photo.full_name} />
-              <p>{photo.full_name} · {photo.registration_number}</p>
-            </div>
-          </div>
-        )}
 
         {confirm && canDeactivateProfiles && (
           <div className="pf-modal" onClick={() => !busy && setConfirm(null)}>

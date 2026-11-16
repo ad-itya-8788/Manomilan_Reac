@@ -7,6 +7,7 @@ use App\Models\WebsiteMaintenanceSetting;
 use App\Models\WebsiteSetting;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class WebsiteSettingsService
@@ -71,6 +72,16 @@ class WebsiteSettingsService
                 : 'bottom-right',
             'url' => $settings->upcoming_events_url,
             'open_new_tab' => (bool) $settings->upcoming_events_open_new_tab,
+            'images' => collect($settings->upcoming_events_images ?? [])
+                ->filter(fn ($path) => is_string($path)
+                    && str_starts_with($path, 'website-upcoming-events/')
+                    && ! str_contains($path, '..'))
+                ->map(fn (string $path) => [
+                    'path' => $path,
+                    'url' => Storage::disk('public')->url($path),
+                ])
+                ->values()
+                ->all(),
         ];
     }
 

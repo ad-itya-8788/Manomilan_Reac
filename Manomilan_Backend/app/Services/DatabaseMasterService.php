@@ -6,7 +6,9 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use App\Profile;
 use App\Support\AuditLogger;
+use App\Support\WebsiteSettingsService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -19,11 +21,27 @@ class DatabaseMasterService
 {
     private const SENSITIVE_COLUMN_PATTERN = '/password|remember_token|token|secret|api_key|private_key|hash/i';
     private const READ_ONLY_RELATED_COLUMN_PATTERN = '/(?:^id$|_id$|_at$|password|remember_token|token|secret|api_key|private_key|hash|photo|image|file|path|document|proof|screenshot|attachment|aadhaar|pan_card|passport|birth_certificate|education_certificate|profession_proof|income_proof|caste_certificate|medical_fitness_certificate|registration_data|payment_details|^data$)/i';
+    private const READ_ONLY_DATABASE_TABLES = [
+        'activity_logs',
+        'api_token_sessions',
+        'cache',
+        'cache_locks',
+        'failed_jobs',
+        'jobs',
+        'job_batches',
+        'migrations',
+        'password_reset_tokens',
+        'password_resets',
+        'personal_access_tokens',
+        'sessions',
+    ];
 
     private readonly array $editableProfileColumns;
 
-    public function __construct(private readonly AuditLogger $auditLogger)
-    {
+    public function __construct(
+        private readonly AuditLogger $auditLogger,
+        private readonly WebsiteSettingsService $websiteSettings
+    ) {
         $this->editableProfileColumns = [
             'full_name',
             'email',
@@ -378,11 +396,21 @@ class DatabaseMasterService
         }
 
         $metadata = Schema::getColumns($table);
+        $readOnlyReason = $this->blockedTableReason($table);
+        $primaryKey = $readOnlyReason === null ? $this->tablePrimaryKey($table) : null;
+        if ($readOnlyReason === null && $primaryKey === null) {
+            $readOnlyReason = 'Only tables with a single primary key can be edited or deleted safely.';
+        }
+        $editableColumns = $readOnlyReason === null
+            ? $this->editableTableColumns($table, $primaryKey)
+            : [];
+        $editableNames = array_flip(array_column($editableColumns, 'name'));
         $columns = array_map(fn (array $column): array => [
             'name' => $column['name'],
             'type' => $column['type_name'] ?? $column['type'] ?? 'unknown',
             'nullable' => (bool) ($column['nullable'] ?? true),
             'sensitive' => $this->isSensitiveColumn($column['name']),
+            'editable' => isset($editableNames[$column['name']]),
         ], $metadata);
         $columnNames = array_column($columns, 'name');
 
@@ -410,18 +438,266 @@ class DatabaseMasterService
             });
         }
 
-        $orderColumn = in_array('id', $columnNames, true) ? 'id' : ($columnNames[0] ?? null);
+        $orderColumn = $primaryKey
+            ?? (in_array('id', $columnNames, true) ? 'id' : ($columnNames[0] ?? null));
         if ($orderColumn !== null) {
             $query->orderByDesc($orderColumn);
         }
 
+        $records = $query->paginate($perPage);
+        $protectedUserIds = [];
+        $protectedSuperAdminIds = [];
+        if ($table === 'users' && $primaryKey !== null) {
+            $recordIds = $records->getCollection()
+                ->pluck($primaryKey)
+                ->filter()
+                ->all();
+            $users = User::query()
+                ->with('role:id,name,user_type,is_active')
+                ->whereIn('id', $recordIds)
+                ->get();
+            $protectedUserIds = $users
+                ->filter(fn (User $user): bool => $user->isSuperAdmin() || $user->profile_id !== null)
+                ->pluck('id')
+                ->map(fn ($id): string => (string) $id)
+                ->all();
+            $protectedSuperAdminIds = $users
+                ->filter(fn (User $user): bool => $user->isSuperAdmin())
+                ->pluck('id')
+                ->map(fn ($id): string => (string) $id)
+                ->all();
+        }
+        $records->through(function ($row) use (
+            $table,
+            $primaryKey,
+            $protectedUserIds,
+            $protectedSuperAdminIds,
+            $editableColumns
+        ): array {
+            $values = (array) $row;
+            $safe = $this->safeRow($values);
+            $recordKey = $primaryKey === null ? null : ($values[$primaryKey] ?? null);
+            $isProtectedSuperAdmin = $recordKey !== null
+                && in_array((string) $recordKey, $protectedSuperAdminIds, true);
+            $safe['_database_master_can_edit'] = $recordKey !== null
+                && $editableColumns !== []
+                && ! $isProtectedSuperAdmin;
+            $safe['_database_master_can_delete'] = $recordKey !== null
+                && ! in_array((string) $recordKey, $protectedUserIds, true);
+
+            return $safe;
+        });
+
         return [
             'table' => $table,
             'columns' => $columns,
-            'records' => $query
-                ->paginate($perPage)
-                ->through(fn ($row): array => $this->safeRow((array) $row)),
+            'primary_key' => $primaryKey,
+            'editable_columns' => $editableColumns,
+            'can_edit' => $editableColumns !== [],
+            'can_delete' => $readOnlyReason === null && $primaryKey !== null,
+            'write_protection_reason' => $readOnlyReason,
+            'records' => $records,
         ];
+    }
+
+    public function updateTableRecord(
+        string $table,
+        string $primaryKey,
+        string $recordKey,
+        array $values,
+        ?User $actor
+    ): array {
+        $this->assertTableWritable($table, $primaryKey);
+        $editableColumns = collect($this->editableTableColumns($table, $primaryKey))
+            ->keyBy('name');
+        $unknownColumns = array_diff(array_keys($values), $editableColumns->keys()->all());
+        if ($unknownColumns !== []) {
+            throw ValidationException::withMessages([
+                'values' => 'Primary keys, relationships, credentials, files, and protected fields cannot be edited here.',
+            ]);
+        }
+
+        if ($values === []) {
+            throw ValidationException::withMessages([
+                'values' => 'At least one editable field is required.',
+            ]);
+        }
+
+        $rules = [];
+        foreach ($values as $name => $value) {
+            $column = $editableColumns[$name];
+            if ($value !== null && ! is_scalar($value)) {
+                throw ValidationException::withMessages([
+                    "values.{$name}" => 'This field must contain a single value.',
+                ]);
+            }
+            if ($value === null && ! $column['nullable']) {
+                throw ValidationException::withMessages([
+                    "values.{$name}" => 'This field cannot be empty.',
+                ]);
+            }
+
+            $rules["values.{$name}"] = array_merge(
+                $column['nullable'] ? ['nullable'] : ['required'],
+                match ($column['type']) {
+                    'boolean' => ['boolean'],
+                    'integer' => ['integer'],
+                    'number' => ['numeric'],
+                    'date' => ['date'],
+                    'json' => ['json'],
+                    default => ['string', 'max:5000'],
+                }
+            );
+        }
+        $validated = Validator::make(['values' => $values], $rules)->validate()['values'];
+
+        if ($table === 'users') {
+            $user = User::query()
+                ->with('role:id,name,user_type,is_active')
+                ->findOrFail($recordKey);
+            if ($user->isSuperAdmin()) {
+                throw ValidationException::withMessages([
+                    'record' => 'Super administrator accounts cannot be changed from the table browser.',
+                ]);
+            }
+        }
+
+        if ($table === 'profiles') {
+            if (! ctype_digit($recordKey)) {
+                throw ValidationException::withMessages([
+                    'record_key' => 'The profile key is invalid.',
+                ]);
+            }
+
+            return $this->updateProfile((int) $recordKey, $validated, $actor);
+        }
+
+        try {
+            return DB::transaction(function () use ($table, $primaryKey, $recordKey, $validated, $actor): array {
+                $query = DB::table($table)->where($primaryKey, $recordKey);
+                $existing = $query->lockForUpdate()->first();
+                if ($existing === null) {
+                    throw (new ModelNotFoundException())->setModel($table, [$recordKey]);
+                }
+
+                $oldValues = array_intersect_key((array) $existing, $validated);
+                $updates = $validated;
+                if (Schema::hasColumn($table, 'updated_at')) {
+                    $updates['updated_at'] = now();
+                }
+                $query->update($updates);
+
+                $this->auditLogger->log(
+                    $actor,
+                    'database_master.table_record_updated',
+                    'system_configuration',
+                    $table,
+                    $recordKey,
+                    null,
+                    $oldValues,
+                    $validated,
+                    sprintf('Updated record %s in %s from Database Master.', $recordKey, $table)
+                );
+
+                if (in_array($table, [
+                    'website_settings',
+                    'website_downtime_settings',
+                    'website_maintenance_settings',
+                ], true)) {
+                    $this->websiteSettings->forget();
+                }
+
+                return ['record' => $this->safeRow((array) $query->first())];
+            });
+        } catch (QueryException $exception) {
+            report($exception);
+            throw ValidationException::withMessages([
+                'record' => 'The update was blocked by a database constraint. No changes were saved.',
+            ]);
+        }
+    }
+
+    public function deleteTableRecord(
+        string $table,
+        string $primaryKey,
+        string $recordKey,
+        ?User $actor
+    ): array {
+        $this->assertTableWritable($table, $primaryKey);
+
+        if ($table === 'profiles') {
+            if (! ctype_digit($recordKey)) {
+                throw ValidationException::withMessages([
+                    'record_key' => 'The profile key is invalid.',
+                ]);
+            }
+
+            return $this->deleteCandidate(
+                (int) $recordKey,
+                $actor,
+                'Confirmed deletion from the All database tables tab.'
+            );
+        }
+
+        try {
+            return DB::transaction(function () use ($table, $primaryKey, $recordKey, $actor): array {
+                $query = DB::table($table)->where($primaryKey, $recordKey);
+                $existing = $query->lockForUpdate()->first();
+                if ($existing === null) {
+                    throw (new ModelNotFoundException())->setModel($table, [$recordKey]);
+                }
+
+                if ($table === 'users') {
+                    $user = User::query()
+                        ->with('role:id,name,user_type,is_active')
+                        ->find($recordKey);
+                    if ($user?->isSuperAdmin()) {
+                        throw ValidationException::withMessages([
+                            'record' => 'Super administrator accounts cannot be deleted from the table browser.',
+                        ]);
+                    }
+                    if ($user?->profile_id !== null) {
+                        throw ValidationException::withMessages([
+                            'record' => 'Delete candidate accounts through the candidate deletion plan to avoid orphaning profile data.',
+                        ]);
+                    }
+                }
+
+                $oldValues = $this->safeRow((array) $existing);
+                if ($query->delete() !== 1) {
+                    throw ValidationException::withMessages([
+                        'record' => 'The record could not be deleted.',
+                    ]);
+                }
+
+                $this->auditLogger->log(
+                    $actor,
+                    'database_master.table_record_deleted',
+                    'system_configuration',
+                    $table,
+                    $recordKey,
+                    null,
+                    $oldValues,
+                    ['deleted' => true],
+                    sprintf('Permanently deleted record %s from %s from Database Master.', $recordKey, $table)
+                );
+
+                if (in_array($table, [
+                    'website_settings',
+                    'website_downtime_settings',
+                    'website_maintenance_settings',
+                ], true)) {
+                    $this->websiteSettings->forget();
+                }
+
+                return ['record_key' => $recordKey, 'deleted' => true];
+            });
+        } catch (QueryException $exception) {
+            report($exception);
+            throw ValidationException::withMessages([
+                'record' => 'Database relationships prevented this deletion. No record was removed.',
+            ]);
+        }
     }
 
     public function updateProfile(int $profileId, array $values, ?User $actor): array
@@ -756,6 +1032,94 @@ class DatabaseMasterService
             })
             ->values()
             ->all();
+    }
+
+    private function editableTableColumns(string $table, ?string $primaryKey): array
+    {
+        if ($primaryKey === null) {
+            return [];
+        }
+
+        $allowedProfileColumns = $table === 'profiles'
+            ? array_flip($this->editableProfileColumns)
+            : null;
+
+        return collect(Schema::getColumns($table))
+            ->filter(function (array $column) use ($allowedProfileColumns, $primaryKey): bool {
+                $name = (string) $column['name'];
+                if ($name === $primaryKey || preg_match(self::READ_ONLY_RELATED_COLUMN_PATTERN, $name) === 1) {
+                    return false;
+                }
+                if ($allowedProfileColumns !== null && ! isset($allowedProfileColumns[$name])) {
+                    return false;
+                }
+
+                $rawType = strtolower((string) ($column['type_name'] ?? '') . ' ' . (string) ($column['type'] ?? ''));
+                return preg_match('/blob|binary|geometry/i', $rawType) !== 1;
+            })
+            ->map(function (array $column): array {
+                $rawType = strtolower((string) ($column['type_name'] ?? '') . ' ' . (string) ($column['type'] ?? ''));
+                $type = match (true) {
+                    str_contains($rawType, 'bool') || preg_match('/tinyint\s*\(\s*1\s*\)/', $rawType) === 1 => 'boolean',
+                    str_contains($rawType, 'json') => 'json',
+                    str_contains($rawType, 'int') => 'integer',
+                    preg_match('/decimal|numeric|float|double|real/', $rawType) === 1 => 'number',
+                    preg_match('/^date(?:\s|$)/', $rawType) === 1 => 'date',
+                    default => 'text',
+                };
+
+                return [
+                    'name' => $column['name'],
+                    'type' => $type,
+                    'nullable' => (bool) ($column['nullable'] ?? true),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function tablePrimaryKey(string $table): ?string
+    {
+        $primary = collect(Schema::getIndexes($table))
+            ->first(fn (array $index): bool => (bool) ($index['primary'] ?? false));
+        $columns = $primary['columns'] ?? [];
+
+        return count($columns) === 1 ? $columns[0] : null;
+    }
+
+    private function blockedTableReason(string $table): ?string
+    {
+        if (in_array($table, self::READ_ONLY_DATABASE_TABLES, true)) {
+            return 'Authentication, framework, and audit tables are read-only.';
+        }
+
+        $viewNames = array_column(Schema::getViews(), 'name');
+        if (in_array($table, $viewNames, true)) {
+            return 'Database views are read-only.';
+        }
+
+        return null;
+    }
+
+    private function assertTableWritable(string $table, string $primaryKey): void
+    {
+        if (! in_array($table, Schema::getTableListing(), true)) {
+            throw ValidationException::withMessages([
+                'table' => 'Unknown database table.',
+            ]);
+        }
+
+        $reason = $this->blockedTableReason($table);
+        if ($reason !== null) {
+            throw ValidationException::withMessages(['table' => $reason]);
+        }
+
+        $actualPrimaryKey = $this->tablePrimaryKey($table);
+        if ($actualPrimaryKey === null || ! hash_equals($actualPrimaryKey, $primaryKey)) {
+            throw ValidationException::withMessages([
+                'primary_key' => 'The table primary key is missing or does not match the live schema.',
+            ]);
+        }
     }
 
     private function profileRelations(): array

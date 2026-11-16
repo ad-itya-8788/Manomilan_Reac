@@ -12,6 +12,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import AdminLayout from "../components/AdminLayout";
 import AdminStats from "../components/AdminStats";
 import AdminPagination from "../components/AdminPagination";
@@ -406,6 +407,10 @@ export default function MelavaPayments() {
                 ) : null}
                 {registrations.map((row, index) => {
                   const name = row.fullName || row.profile?.fullName || "Unnamed candidate";
+                  const rowNumber = (pagination?.from || 1) + index;
+                  const profileDetailsUrl = row.profile_id
+                    ? `/admin/profiles/${row.profile_id}/details?sr_no=${rowNumber}`
+                    : null;
                   const profilePhoto = apiMediaUrl(getProfilePhoto(row, [
                     "profile_photo_url",
                     "photo_url",
@@ -416,12 +421,28 @@ export default function MelavaPayments() {
                       <td>
                         <div className="ui-person">
                           {profilePhoto ? (
-                            <span className="ui-avatar"><img src={profilePhoto} alt="" loading="lazy" /></span>
+                            profileDetailsUrl ? (
+                              <Link to={profileDetailsUrl} className="ui-avatar" aria-label={`View profile of ${name}`}>
+                                <img src={profilePhoto} alt="" loading="lazy" />
+                              </Link>
+                            ) : (
+                              <span className="ui-avatar"><img src={profilePhoto} alt="" loading="lazy" /></span>
+                            )
                           ) : (
-                            <span className="ui-avatar">{initials(row.full_name)}</span>
+                            profileDetailsUrl ? (
+                              <Link to={profileDetailsUrl} className="ui-avatar" aria-label={`View profile of ${name}`}>
+                                {initials(name)}
+                              </Link>
+                            ) : (
+                              <span className="ui-avatar">{initials(name)}</span>
+                            )
                           )}
                           <span className="ui-person-text">
-                            <strong>{name}</strong>
+                            <strong>
+                              {profileDetailsUrl
+                                ? <Link className="ui-link" to={profileDetailsUrl}>{name}</Link>
+                                : name}
+                            </strong>
                             <small>{row.username || "Mobile unavailable"}</small>
                             <RecordEditorName record={row} />
                           </span>

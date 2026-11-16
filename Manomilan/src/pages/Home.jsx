@@ -5,7 +5,6 @@ import HomeSuccessStories from "../components/HomeSuccessStories.jsx";
 import Committee from "../components/Committee.jsx";
 import Gallery from "../components/Gallery.jsx";
 import DowntimeNotice from "../website/DowntimeNotice.jsx";
-import WebsiteUpcomingEvents from "../website/WebsiteUpcomingEvents.jsx";
 
 export default function Home() {
   return (
@@ -19,7 +18,6 @@ export default function Home() {
         <Committee />
         <Gallery />
       </main>
-      <WebsiteUpcomingEvents />
     </div>
   );
 }

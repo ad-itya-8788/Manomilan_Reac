@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { request } from "../api";
 
 const REGISTER_URL = "/melava-registration";
@@ -254,10 +255,10 @@ export default function Hero() {
 
             <div className="mmh-hero-actions">
               <div className="mmh-action-card">
-                <a href={REGISTER_URL} className="mmh-btn mmh-btn--primary">
+                <Link to={REGISTER_URL} className="mmh-btn mmh-btn--primary">
                   <i className="bi bi-calendar-heart" aria-hidden="true" />
                   Melava Registration
-                </a>
+                </Link>
                 <span className="mmh-fee">
                   {melavaPrice.price}
                   {melavaPrice.detail ? <small>{melavaPrice.detail}</small> : null}

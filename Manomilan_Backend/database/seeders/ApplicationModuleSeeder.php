@@ -59,12 +59,20 @@ class ApplicationModuleSeeder extends Seeder
             'api_prefixes' => ['/melava-registrations', '/melava-campaigns'],
             'icon' => 'calendar-heart',
         ],
-        'ID Cards' => [
+        'ID Printer' => [
             'key' => 'id_cards',
-            'description' => 'ID card assignment, design and Bio Data access for Aaryans Manomilan.',
-            'route' => '/admin/id-cards',
-            'frontend_routes' => ['/admin/id-cards'],
+            'description' => 'Search, preview, print and download candidate ID cards and Bio Data.',
+            'route' => '/admin/id-printer',
+            'frontend_routes' => ['/admin/id-printer', '/admin/id-cards'],
             'api_prefixes' => ['/id-cards'],
+            'icon' => 'id-card',
+        ],
+        'ID Generation' => [
+            'key' => 'id_card_generation',
+            'description' => 'Super Admin-only ID generation and card design.',
+            'route' => '/admin/id-generation',
+            'frontend_routes' => ['/admin/id-generation'],
+            'api_prefixes' => ['/id-cards/assignment/preview', '/id-cards/assign'],
             'icon' => 'id-card',
         ],
         'Website Registration' => [
@@ -150,7 +158,12 @@ class ApplicationModuleSeeder extends Seeder
         }
 
         foreach (self::MODULES as $moduleName => $configuration) {
-            if (in_array($configuration['key'], ['software_ticket_module', 'website_registration'], true)) {
+            if (in_array($configuration['key'], [
+                'software_ticket_module',
+                'website_registration',
+                'id_cards',
+                'id_card_generation',
+            ], true)) {
                 $module = Module::query()->where('module_key', $configuration['key'])->first()
                     ?? Module::query()
                         ->where('application_id', $application->id)

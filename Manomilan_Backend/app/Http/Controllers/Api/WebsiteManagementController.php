@@ -8,6 +8,7 @@ use App\Support\WebsiteSettingsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class WebsiteManagementController extends Controller
 {
@@ -72,10 +73,42 @@ class WebsiteManagementController extends Controller
             'position' => ['required', 'string', Rule::in(['bottom-right', 'bottom-left'])],
             'url' => ['nullable', 'string', 'max:2048', 'regex:/^(https?:\/\/[^\s]+|\/(?!\/)[^\s]*)$/i'],
             'open_new_tab' => ['required', 'boolean'],
+            'remove_images' => ['sometimes', 'array', 'max:10'],
+            'remove_images.*' => ['string', 'max:255'],
+            'new_images' => ['sometimes', 'array', 'max:10'],
+            'new_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
         try {
             $settings = $this->settings->settings();
+            $currentImages = array_values(array_filter(
+                $settings->upcoming_events_images ?? [],
+                fn ($path) => is_string($path)
+                    && str_starts_with($path, 'website-upcoming-events/')
+                    && ! str_contains($path, '..')
+            ));
+            $removedImages = $data['remove_images'] ?? [];
+            $retainedImages = array_values(array_filter(
+                $currentImages,
+                fn ($path) => ! in_array($path, $removedImages, true)
+            ));
+            $newImageFiles = $request->file('new_images', []);
+            if (! is_array($newImageFiles)) {
+                $newImageFiles = [$newImageFiles];
+            }
+            if (count($retainedImages) + count($newImageFiles) > 10) {
+                throw ValidationException::withMessages([
+                    'new_images' => 'A maximum of 10 Upcoming Events images can be saved.',
+                ]);
+            }
+            foreach ($newImageFiles as $imageFile) {
+                $path = $imageFile->store('website-upcoming-events', 'public');
+                if (! is_string($path) || $path === '') {
+                    throw new \RuntimeException('Unable to store an Upcoming Events image.');
+                }
+                $retainedImages[] = $path;
+            }
+
             $columnMap = [
                 'enabled' => 'upcoming_events_enabled',
                 'label' => 'upcoming_events_label',
@@ -85,6 +118,7 @@ class WebsiteManagementController extends Controller
                 'position' => 'upcoming_events_position',
                 'url' => 'upcoming_events_url',
                 'open_new_tab' => 'upcoming_events_open_new_tab',
+                'images' => 'upcoming_events_images',
             ];
             $attributes = [
                 'upcoming_events_enabled' => $data['enabled'],
@@ -95,6 +129,7 @@ class WebsiteManagementController extends Controller
                 'upcoming_events_position' => $data['position'],
                 'upcoming_events_url' => $data['url'],
                 'upcoming_events_open_new_tab' => $data['open_new_tab'],
+                'upcoming_events_images' => $retainedImages,
             ];
             $old = $settings->only(array_values($columnMap));
 
@@ -119,6 +154,8 @@ class WebsiteManagementController extends Controller
                 'message' => 'Upcoming Events settings saved.',
                 'data' => $this->settings->upcomingEventsPayload($settings->fresh()),
             ]);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (\Throwable $exception) {
             report($exception);
 

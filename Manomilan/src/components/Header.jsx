@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 const PLACEHOLDER = "https://placehold.co/200x180/DC143C/FFFFFF?text=Aaryan's+Manomilan";
 
@@ -124,16 +124,16 @@ export default function Header() {
                   <i className="bi bi-chevron-down" aria-hidden="true" />
                 </button>
                 <div className={`mmh-reg-menu${regOpen ? " show" : ""}`}>
-                  <a href={REGISTER_URL} onClick={closeReg}>Melava Registration</a>
-                  <a href={LOGIN_URL} onClick={closeReg}>Login</a>
+                  <Link to={REGISTER_URL} onClick={closeReg}>Melava Registration</Link>
+                  <Link to={LOGIN_URL} onClick={closeReg}>Login</Link>
                 </div>
               </span>
             </nav>
 
-            <a className="mmh-menu-login" href={LOGIN_URL}>
+            <Link className="mmh-menu-login" to={LOGIN_URL}>
               <i className="bi bi-person-circle" aria-hidden="true" />
               Login
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -154,8 +154,8 @@ export default function Header() {
           <p className="mmh-mobile-blessing">॥ जय जिनेन्द्र ॥</p>
 
           <div className="mmh-mobile-actions">
-            <a href={LOGIN_URL} className="mmh-mobile-login">Login</a>
-            <a href={REGISTER_URL} className="mmh-mobile-register">Register</a>
+            <Link to={LOGIN_URL} className="mmh-mobile-login">Login</Link>
+            <Link to={REGISTER_URL} className="mmh-mobile-register">Register</Link>
           </div>
 
           {isAuthPage && (
@@ -203,8 +203,8 @@ export default function Header() {
               </a>
             );
           })}
-          <a href={REGISTER_URL} onClick={closeMenu}>Melava Registration</a>
-          <a href={LOGIN_URL} onClick={closeMenu}>Login</a>
+          <Link to={REGISTER_URL} onClick={closeMenu}>Melava Registration</Link>
+          <Link to={LOGIN_URL} onClick={closeMenu}>Login</Link>
         </nav>
       </div>
     </>
